@@ -1,0 +1,4 @@
+# Host-only validation dependencies. Target runtime remains Python standard library only.
+jsonschema==4.26.0
+PyYAML==6.0.3
+yamllint==1.38.0

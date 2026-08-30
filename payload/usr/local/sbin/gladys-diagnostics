@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Diagnostics are deliberately best-effort: a failed probe is reported and
+# does not prevent the remaining non-secret support information from printing.
+section() {
+    printf '\n== %s ==\n' "$1"
+}
+
+run_optional() {
+    if ! "$@" 2>&1; then
+        printf '[unavailable: command exited non-zero]\n'
+    fi
+}
+
+section "Installer"
+run_optional sed -n '1p' /etc/gladys-installer/version
+
+section "Ubuntu"
+run_optional sh -c '. /etc/os-release && printf "%s %s (%s)\n" "$NAME" "$VERSION_ID" "$VERSION_CODENAME"'
+
+section "Kernel"
+run_optional uname -r
+
+section "Boot mode"
+if [[ -d /sys/firmware/efi ]]; then
+    printf 'UEFI\n'
+else
+    printf 'Legacy/unknown\n'
+fi
+
+section "Network interfaces"
+run_optional ip -brief address
+
+section "LAN IPv4"
+run_optional ip -4 -brief address show scope global
+
+section "Default route"
+run_optional ip route show default
+
+section "Disk usage"
+run_optional df -h -x tmpfs -x devtmpfs
+
+section "Docker version"
+run_optional docker version
+
+section "Docker daemon"
+run_optional systemctl is-active docker.service
+
+section "Docker Compose version"
+run_optional docker compose version
+
+section "Gladys Compose status"
+run_optional docker compose -f /opt/gladys/compose.yaml ps
+
+section "Installer services"
+run_optional systemctl is-active gladys-firstboot.service gladys-setup-web.service gladys-console.service
+
+section "Recent first-boot journal"
+run_optional journalctl -u gladys-firstboot.service --no-pager -n 200

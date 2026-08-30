@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="__LANG__" dir="__DIR__">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex,nofollow">
+    <meta name="theme-color" content="#eef3fb">
+    <title>Gladys Assistant</title>
+    <link rel="icon" type="image/png" sizes="96x96" href="__GLADYS_ICON__">
+    <style>/*__STYLE__*/</style>
+  </head>
+  <body data-phase="PREFLIGHT" data-active="true">
+    <main class="setup-page">
+      <header class="brand-header">
+        <img
+          class="brand-logo"
+          src="__GLADYS_ICON__"
+          width="56"
+          height="56"
+          alt=""
+        >
+        <span>Gladys Assistant</span>
+      </header>
+
+      <nav class="setup-navigation" aria-label="__PROGRESS_LABEL__">
+        <ol class="steps">
+          <li class="step is-active" data-step="system">
+            <span class="step-status" aria-hidden="true">1</span>
+            <span class="step-label">__STEP_SYSTEM__</span>
+          </li>
+          <li class="step" data-step="network">
+            <span class="step-status" aria-hidden="true">2</span>
+            <span class="step-label">__STEP_NETWORK__</span>
+          </li>
+          <li class="step" data-step="packages">
+            <span class="step-status" aria-hidden="true">3</span>
+            <span class="step-label">__STEP_PACKAGES__</span>
+          </li>
+          <li class="step" data-step="docker">
+            <span class="step-status" aria-hidden="true">4</span>
+            <span class="step-label">__STEP_DOCKER__</span>
+          </li>
+          <li class="step" data-step="download">
+            <span class="step-status" aria-hidden="true">5</span>
+            <span class="step-label">__STEP_DOWNLOAD__</span>
+          </li>
+          <li class="step" data-step="services">
+            <span class="step-status" aria-hidden="true">6</span>
+            <span class="step-label">__STEP_SERVICES__</span>
+          </li>
+        </ol>
+      </nav>
+
+      <section class="installer-card" aria-labelledby="message">
+        <div class="installer-body">
+          <div class="status-line">
+            <div id="connection" class="connection is-live">
+              <span class="connection-dot" aria-hidden="true"></span>
+              <span id="connection-label">__LIVE__</span>
+            </div>
+          </div>
+
+          <div class="installer-content">
+            <section class="hero">
+              <p class="eyebrow">GLADYS ASSISTANT</p>
+              <h1 id="message" aria-live="polite">__PREPARING_TITLE__</h1>
+              <p id="detail" class="detail">__KEEP_CONNECTED__</p>
+
+              <div class="activity" aria-hidden="true">
+                <span></span><span></span><span></span>
+              </div>
+            </section>
+
+            <section class="progress-panel" aria-labelledby="progress-label">
+              <div class="progress-heading">
+                <span id="progress-label">__PROGRESS_LABEL__</span>
+                <strong id="percent">2%</strong>
+              </div>
+              <div class="progress-block">
+                <div
+                  id="track"
+                  class="track"
+                  role="progressbar"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  aria-valuenow="2"
+                >
+                  <div id="progress" class="progress"></div>
+                </div>
+              </div>
+              <p class="progress-note">__KEEP_CONNECTED__</p>
+            </section>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script>/*__I18N__*/</script>
+    <script>/*__APP__*/</script>
+  </body>
+</html>

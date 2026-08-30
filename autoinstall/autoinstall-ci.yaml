@@ -1,0 +1,37 @@
+autoinstall:
+  version: 1
+  interactive-sections: []
+  locale: fr_FR.UTF-8
+  keyboard:
+    layout: fr
+  timezone: Etc/UTC
+  source:
+    id: ubuntu-server-minimal
+  storage:
+    layout:
+      name: direct
+  ssh:
+    install-server: false
+  kernel-crash-dumps:
+    enabled: false
+  apt:
+    fallback: offline-install
+  updates: security
+  user-data:
+    hostname: gladys
+    preserve_hostname: false
+    manage_etc_hosts: true
+    disable_root: true
+    ssh_pwauth: false
+    users: []
+  late-commands:
+    - [sh, -c, "cd /cdrom/gladys && sha256sum -c gladys-payload.tar.sha256"]
+    - [sh, -c, "tar --extract --file=/cdrom/gladys/gladys-payload.tar --directory=/target --numeric-owner --same-permissions"]
+    - [sh, -c, "chown -R 0:0 /target/usr/lib/gladys-installer /target/usr/share/gladys-installer /target/opt/gladys /target/etc/gladys-installer /target/var/lib/gladys-installer"]
+    - [sh, -c, "chmod 0755 /target/usr/lib/gladys-installer/*.py /target/usr/local/sbin/gladys-diagnostics"]
+    - [sh, -c, "chmod 0644 /target/etc/systemd/system/gladys-*.service /target/opt/gladys/compose.yaml"]
+    - systemctl --root=/target enable gladys-setup-web.service
+    - systemctl --root=/target enable gladys-firstboot.service
+    - systemctl --root=/target enable gladys-console.service
+    - systemctl --root=/target mask getty@tty1.service
+  shutdown: reboot

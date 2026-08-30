@@ -1,0 +1,16 @@
+/build/
+/dist/
+/.venv/
+/.cache/
+/.worktrees/
+*.iso
+*.iso.sha256
+*.qcow2
+*.raw
+*.img
+OVMF_VARS*.fd
+__pycache__/
+*.py[cod]
+.coverage
+.pytest_cache/
+.yamllint-cache

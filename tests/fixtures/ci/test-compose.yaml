@@ -1,0 +1,8 @@
+services:
+  test-app:
+    image: traefik/whoami:v1.12.0
+    container_name: gladys-test-app
+    restart: always
+    network_mode: host
+    command:
+      - --port=80

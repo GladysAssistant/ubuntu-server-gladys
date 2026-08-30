@@ -1,0 +1,22 @@
+[Unit]
+Description=Gladys Assistant local status console
+After=systemd-user-sessions.service
+Conflicts=getty@tty1.service
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=-/etc/default/locale
+ExecStart=/usr/lib/gladys-installer/console.py
+Restart=always
+RestartSec=2
+StandardInput=tty
+StandardOutput=tty
+StandardError=journal
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+
+[Install]
+WantedBy=multi-user.target

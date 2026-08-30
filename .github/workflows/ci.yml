@@ -1,0 +1,200 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install lint tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes shellcheck shfmt yamllint
+      - name: Shell checks
+        run: |
+          find scripts tests/integration -type f -name '*.sh' -print0 | xargs -0 shellcheck
+          shfmt -d scripts/*.sh tests/integration/*.sh
+      - name: Python and YAML checks
+        run: |
+          python3 -m compileall -q payload/usr/lib/gladys-installer scripts tests
+          yamllint -c .yamllint.yml autoinstall payload/opt/gladys/compose.yaml .github
+          docker compose -f payload/opt/gladys/compose.yaml config --quiet
+
+  unit-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Python validation dependencies
+        run: |
+          python3 -m venv --system-site-packages .venv
+          .venv/bin/pip install --requirement requirements-build.txt
+      - name: Run unit tests
+        run: .venv/bin/python -m unittest discover -s tests/unit -v
+
+  validate-config:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes git python3-venv squashfs-tools xorriso yamllint
+          python3 -m venv --system-site-packages .venv
+          .venv/bin/pip install --requirement requirements-build.txt
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Authenticate Ubuntu metadata
+        id: ubuntu
+        run: |
+          bash scripts/fetch-ubuntu-base.sh --metadata-only
+          echo "sha256=$(python3 -c 'import json; print(json.load(open("build/ubuntu-source.json"))["sha256"])')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/cache
+          key: ubuntu-26.04-amd64-${{ steps.ubuntu.outputs.sha256 }}
+      - name: Verify Ubuntu ISO and prepare pinned Subiquity
+        run: |
+          bash scripts/fetch-ubuntu-base.sh
+          validator="$(bash scripts/fetch-subiquity-validator.sh)"
+          make -C "$validator" install_deps
+      - name: Validate Autoinstall
+        run: bash scripts/validate-autoinstall.sh --base-iso "$(python3 -c 'import json; print(json.load(open("build/ubuntu-source.json"))["path"])')"
+
+  build-iso:
+    needs: [lint, unit-tests, validate-config]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes git grub-common python3-venv squashfs-tools xorriso yamllint
+          python3 -m venv --system-site-packages .venv
+          .venv/bin/pip install --requirement requirements-build.txt
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Authenticate Ubuntu metadata
+        id: ubuntu
+        run: |
+          bash scripts/fetch-ubuntu-base.sh --metadata-only
+          echo "sha256=$(python3 -c 'import json; print(json.load(open("build/ubuntu-source.json"))["sha256"])')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/cache
+          key: ubuntu-26.04-amd64-${{ steps.ubuntu.outputs.sha256 }}
+      - name: Prepare pinned Subiquity dependencies
+        run: |
+          validator="$(bash scripts/fetch-subiquity-validator.sh)"
+          make -C "$validator" install_deps
+      - name: Build production and smoke media
+        run: |
+          bash scripts/build-iso.sh --profile production
+          bash scripts/build-iso.sh --profile ci-smoke
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-media
+          path: |
+            dist/*.iso
+            dist/*.iso.sha256
+            dist/build-info*.json
+          retention-days: 7
+
+  inspect-iso:
+    needs: build-iso
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: build-media
+          path: dist
+      - name: Install inspection tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes grub-common python3-venv xorriso
+          python3 -m venv --system-site-packages .venv
+          .venv/bin/pip install --requirement requirements-build.txt
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Authenticate Ubuntu metadata
+        id: ubuntu
+        run: |
+          bash scripts/fetch-ubuntu-base.sh --metadata-only
+          echo "sha256=$(python3 -c 'import json; print(json.load(open("build/ubuntu-source.json"))["sha256"])')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/cache
+          key: ubuntu-26.04-amd64-${{ steps.ubuntu.outputs.sha256 }}
+      - name: Reinspect finished production media
+        run: |
+          bash scripts/fetch-ubuntu-base.sh
+          version="$(tr -d '\r\n' < VERSION)"
+          base="$(python3 -c 'import json; print(json.load(open("build/ubuntu-source.json"))["path"])')"
+          bash scripts/inspect-iso.sh --iso "dist/gladys-assistant-installer-v${version}-amd64.iso" --base-iso "$base" --profile production
+
+  qemu-install:
+    needs: [build-iso, inspect-iso]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: build-media
+          path: dist
+      - name: Install QEMU and libguestfs
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes curl libguestfs-tools ovmf qemu-system-x86 qemu-utils
+          test -c /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Install smoke media under UEFI
+        run: |
+          version="$(tr -d '\r\n' < VERSION)"
+          bash tests/integration/qemu-install.sh --iso "dist/gladys-assistant-installer-ci-smoke-v${version}-amd64.iso" --work-dir build/qemu-installed
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: qemu-installed
+          path: build/qemu-installed
+          retention-days: 2
+
+  qemu-firstboot:
+    needs: qemu-install
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: qemu-installed
+          path: build/qemu-installed
+      - name: Install QEMU and libguestfs
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes curl libguestfs-tools ovmf qemu-system-x86 qemu-utils
+          test -c /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Exercise real Docker smoke first boot
+        run: bash tests/integration/qemu-firstboot.sh --disk build/qemu-installed/system.qcow2 --vars build/qemu-installed/OVMF_VARS.fd --work-dir build/qemu-firstboot --profile ci-smoke
+      - name: Upload first-boot diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: qemu-firstboot-diagnostics
+          path: build/qemu-firstboot
+          if-no-files-found: warn
+          retention-days: 7

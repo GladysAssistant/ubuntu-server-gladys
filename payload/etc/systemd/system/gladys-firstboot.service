@@ -1,0 +1,21 @@
+[Unit]
+Description=Gladys Assistant first-boot provisioning
+Wants=network-online.target gladys-setup-web.service
+After=network-online.target gladys-setup-web.service
+ConditionPathExists=!/var/lib/gladys-installer/completed
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/lib/gladys-installer/bootstrap.py
+Restart=on-failure
+RestartSec=10
+RestartPreventExitStatus=78
+TimeoutStartSec=6h
+TimeoutStopSec=30
+KillMode=control-group
+NoNewPrivileges=no
+
+[Install]
+WantedBy=multi-user.target
