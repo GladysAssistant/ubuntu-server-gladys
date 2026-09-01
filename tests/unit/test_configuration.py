@@ -19,12 +19,13 @@ def load_autoinstall(name: str) -> dict:
 
 
 class AutoinstallConfigurationTests(unittest.TestCase):
-    def test_production_prompts_for_language_keyboard_and_storage(self) -> None:
+    def test_production_prompts_for_operator_choices(self) -> None:
         config = load_autoinstall("autoinstall.yaml")
 
         self.assertEqual(config["version"], 1)
         self.assertEqual(
-            config["interactive-sections"], ["locale", "keyboard", "storage"]
+            config["interactive-sections"],
+            ["locale", "keyboard", "storage", "identity", "ssh"],
         )
         self.assertEqual(config["locale"], "fr_FR.UTF-8")
         self.assertEqual(config["keyboard"], {"layout": "fr"})
@@ -32,19 +33,23 @@ class AutoinstallConfigurationTests(unittest.TestCase):
         self.assertEqual(config["storage"]["layout"]["name"], "direct")
         self.assertEqual(config["ssh"], {"install-server": False})
         self.assertNotIn("identity", config)
-        self.assertEqual(config["user-data"]["users"], [])
         self.assertTrue(config["user-data"]["disable_root"])
-        self.assertFalse(config["user-data"]["ssh_pwauth"])
+        # The account comes from the interactive identity screen; cloud-init
+        # user-data must not override or suppress it.
+        self.assertNotIn("users", config["user-data"])
+        self.assertNotIn("ssh_pwauth", config["user-data"])
 
-    def test_ci_differs_only_in_interactive_sections(self) -> None:
+    def test_ci_differs_only_in_interactivity_and_account_pin(self) -> None:
         production = copy.deepcopy(load_autoinstall("autoinstall.yaml"))
         ci = copy.deepcopy(load_autoinstall("autoinstall-ci.yaml"))
 
         self.assertEqual(
             production.pop("interactive-sections"),
-            ["locale", "keyboard", "storage"],
+            ["locale", "keyboard", "storage", "identity", "ssh"],
         )
         self.assertEqual(ci.pop("interactive-sections"), [])
+        self.assertEqual(ci["user-data"].pop("users"), [])
+        self.assertIs(ci["user-data"].pop("ssh_pwauth"), False)
         self.assertEqual(ci, production)
 
     def test_late_commands_verify_before_extracting_payload(self) -> None:

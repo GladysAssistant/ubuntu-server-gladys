@@ -133,7 +133,9 @@ if not isinstance(document, dict) or set(document) != {"autoinstall"}:
     raise SystemExit("finished ISO contains an invalid Autoinstall document")
 config = document["autoinstall"]
 expected_interactive = (
-    ["locale", "keyboard", "storage"] if expected_profile == "production" else []
+    ["locale", "keyboard", "storage", "identity", "ssh"]
+    if expected_profile == "production"
+    else []
 )
 if config.get("interactive-sections") != expected_interactive:
     raise SystemExit("finished ISO contains the wrong Autoinstall profile")
