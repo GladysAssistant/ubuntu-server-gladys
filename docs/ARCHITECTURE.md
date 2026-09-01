@@ -24,10 +24,10 @@ The Ubuntu shim, GRUB EFI binaries, kernel, initrd, EFI partition, and media int
 
 ## Installed appliance
 
-Subiquity installs a normal Ubuntu Server target from the minimized source. Production media present the locale, keyboard, and storage screens in the normal installer order, with French locale and French AZERTY keyboard preselected; the CI Autoinstall document differs only in that interactivity. The result is deliberately spartan:
+Subiquity installs a normal Ubuntu Server target from the minimized source. Production media present the locale, keyboard, storage, identity, and SSH screens in the normal installer order, with French locale and French AZERTY keyboard preselected and the OpenSSH server off by default; the CI Autoinstall document replaces that interactivity with an explicitly accountless pin. The result is deliberately spartan:
 
 - Timezone is UTC and the hostname is `gladys`.
-- Root is locked, no ordinary user account is created, and OpenSSH Server is not installed.
+- The operator creates their own administrator account on the identity screen and decides on the SSH screen whether the OpenSSH server is installed. Root stays locked and the ISO embeds no account or password.
 - Only security updates are enabled; automatic reboot and release upgrades are disabled.
 
 Autoinstall late commands verify the payload SHA256 before extraction, extract it into the target with numeric ownership, enforce root ownership and explicit permissions, install the version file, enable the three Gladys systemd units, and mask the tty1 getty so the status console owns that terminal.

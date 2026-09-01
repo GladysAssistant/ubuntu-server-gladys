@@ -19,7 +19,7 @@ class ConfigurationError(ValueError):
 
 
 CANONICAL_VALIDATOR_SOURCE_ID = "synthesized"
-PRODUCTION_INTERACTIVE_SECTIONS = ["locale", "keyboard", "storage"]
+PRODUCTION_INTERACTIVE_SECTIONS = ["locale", "keyboard", "storage", "identity", "ssh"]
 
 
 def _load(path: Path) -> dict:
@@ -37,7 +37,7 @@ def _load(path: Path) -> dict:
 def _safety_checks(config: dict) -> None:
     if config.get("interactive-sections") != PRODUCTION_INTERACTIVE_SECTIONS:
         raise ConfigurationError(
-            "production must make locale, keyboard, and storage interactive"
+            "production must make locale, keyboard, storage, identity, and ssh interactive"
         )
     if config.get("locale") != "fr_FR.UTF-8":
         raise ConfigurationError("production locale default must be French")
@@ -48,14 +48,16 @@ def _safety_checks(config: dict) -> None:
     if config.get("storage", {}).get("layout", {}).get("name") != "direct":
         raise ConfigurationError("production storage layout must be direct")
     if "identity" in config:
-        raise ConfigurationError("production must not create a known identity")
+        raise ConfigurationError("production must not embed a known identity")
     if config.get("ssh") != {"install-server": False}:
-        raise ConfigurationError("SSH server must remain disabled")
+        raise ConfigurationError("the SSH screen default must remain no server")
     user_data = config.get("user-data", {})
-    if user_data.get("users") != [] or user_data.get("disable_root") is not True:
-        raise ConfigurationError("production must contain no ordinary user and must lock root")
-    if user_data.get("ssh_pwauth") is not False:
-        raise ConfigurationError("SSH password authentication must be disabled")
+    if user_data.get("disable_root") is not True:
+        raise ConfigurationError("production must lock the root account")
+    if "users" in user_data or "ssh_pwauth" in user_data:
+        raise ConfigurationError(
+            "production user-data must not override the interactively created account"
+        )
     commands = config.get("late-commands", [])
     rendered = "\n".join(
         command if isinstance(command, str) else " ".join(command) for command in commands
@@ -131,8 +133,18 @@ def validate_repository_configs(
         )
     if ci_comparable.pop("interactive-sections", None) != []:
         raise ConfigurationError("CI interactive sections must be empty")
+    # Production collects the account and the SSH choice interactively; the
+    # unattended CI media replace those screens with an explicitly accountless
+    # cloud-init pin. This is the only tolerated difference beyond interactivity.
+    ci_user_data = ci_comparable.get("user-data")
+    if not isinstance(ci_user_data, dict) or ci_user_data.pop("users", None) != []:
+        raise ConfigurationError("CI must keep unattended installs accountless (users: [])")
+    if ci_user_data.pop("ssh_pwauth", None) is not False:
+        raise ConfigurationError("CI must disable SSH password authentication")
     if production_comparable != ci_comparable:
-        raise ConfigurationError("production and CI Autoinstall differ outside interactivity")
+        raise ConfigurationError(
+            "production and CI Autoinstall differ outside interactivity and the CI account pin"
+        )
     try:
         buildlib.require_minimal_source(catalog_path.read_text(encoding="utf-8"))
     except buildlib.BuildInputError as exc:
