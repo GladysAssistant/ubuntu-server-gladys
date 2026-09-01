@@ -1056,11 +1056,14 @@ class AutoinstallValidatorTests(unittest.TestCase):
             catalog = root / "catalog.yaml"
             production.write_text(
                 "autoinstall:\n  version: 1\n"
-                "  interactive-sections: [locale, keyboard, storage]\n",
+                "  interactive-sections: [locale, keyboard, storage, identity, ssh]\n"
+                "  user-data: {}\n",
                 encoding="utf-8",
             )
             ci.write_text(
-                "autoinstall:\n  version: 1\n  interactive-sections: []\n  locale: en_US.UTF-8\n",
+                "autoinstall:\n  version: 1\n  interactive-sections: []\n"
+                "  user-data: {users: [], ssh_pwauth: false}\n"
+                "  locale: en_US.UTF-8\n",
                 encoding="utf-8",
             )
             schema.write_text(

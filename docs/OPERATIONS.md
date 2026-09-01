@@ -43,11 +43,13 @@ The completion marker is `/var/lib/gladys-installer/completed`. The sibling `sta
 - Gladys data persists in `/var/lib/gladysassistant` and survives container updates and reboots.
 - Gladys follows the moving `v5` channel. Watchtower pulls compatible updates automatically and cleans replaced images. No manual action and no installer rebuild are needed for ordinary Gladys updates.
 - Ubuntu installs security updates through `unattended-upgrades`. Automatic reboot and Ubuntu release upgrades are disabled.
-- The appliance has no SSH server, no ordinary account, and a locked root. This is intentional: see [SECURITY.md](SECURITY.md).
+- The only account is the one created during installation, and the OpenSSH server exists only if it was selected then. Root stays locked and no default credentials exist: see [SECURITY.md](SECURITY.md).
 
 ## Diagnostics
 
 `gladys-diagnostics` prints safe, non-secret support information: installer and Ubuntu versions, boot mode, network state, disk usage, Docker and Compose status, service states, and recent first boot journal lines.
+
+Log in with the account created during installation — on a virtual console with an attached keyboard (for example Ctrl+Alt+F2; tty1 is reserved for the status display) or over SSH if the OpenSSH server was selected — and run:
 
 ```bash
 sudo gladys-diagnostics
