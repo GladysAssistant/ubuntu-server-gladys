@@ -6,6 +6,8 @@ services:
     privileged: true
     network_mode: host
     cgroup: host
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     logging:
       driver: json-file
       options:
@@ -22,11 +24,16 @@ services:
       - /run/udev:/run/udev:ro
 
   watchtower:
-    image: nickfedor/watchtower
+    image: nickfedor/watchtower:1.22.3@sha256:2f8f2a9bd21a195b3b650409532a20f6aada8ef5834f00d0d7a999dee0779a81
     container_name: watchtower
     restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
     command:
       - --cleanup
       - --include-restarting
+      - --label-enable
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

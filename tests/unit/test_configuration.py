@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import re
 import unittest
 from pathlib import Path
@@ -76,8 +77,35 @@ class ComposeConfigurationTests(unittest.TestCase):
         self.assertEqual(gladys["network_mode"], "host")
         self.assertEqual(gladys["cgroup"], "host")
         self.assertIn("/var/lib/gladysassistant:/var/lib/gladysassistant", gladys["volumes"])
-        self.assertEqual(compose["services"]["watchtower"]["image"], "nickfedor/watchtower")
         self.assertIsNone(re.search(r"gladysassistant/gladys:v5\.\d", text))
+
+    def test_watchtower_is_pinned_and_updates_only_gladys(self) -> None:
+        compose = yaml.safe_load(
+            (ROOT / "payload" / "opt" / "gladys" / "compose.yaml").read_text(encoding="utf-8")
+        )
+        gladys = compose["services"]["gladys"]
+        watchtower = compose["services"]["watchtower"]
+
+        self.assertRegex(
+            watchtower["image"], r"^nickfedor/watchtower:\d+\.\d+\.\d+@sha256:[0-9a-f]{64}$"
+        )
+        self.assertIn("--label-enable", watchtower["command"])
+        self.assertEqual(gladys["labels"], {"com.centurylinklabs.watchtower.enable": "true"})
+        self.assertNotIn("labels", watchtower)
+
+    def test_container_logs_are_rotated(self) -> None:
+        compose = yaml.safe_load(
+            (ROOT / "payload" / "opt" / "gladys" / "compose.yaml").read_text(encoding="utf-8")
+        )
+        for name, service in compose["services"].items():
+            with self.subTest(service=name):
+                self.assertEqual(service["logging"]["driver"], "json-file")
+                self.assertEqual(service["logging"]["options"]["max-size"], "10m")
+        daemon = json.loads(
+            (ROOT / "payload" / "etc" / "docker" / "daemon.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(daemon["log-driver"], "json-file")
+        self.assertEqual(daemon["log-opts"], {"max-size": "10m", "max-file": "3"})
 
 
 if __name__ == "__main__":
