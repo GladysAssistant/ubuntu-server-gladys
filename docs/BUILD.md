@@ -35,7 +35,7 @@ bash scripts/build-iso.sh --profile ci-real      # automatic disk, production pa
 | `ci-smoke` | Automatic disposable disk | Production payload plus test fixtures and a pinned lightweight HTTP container in place of Gladys | Fast pipeline and recovery tests |
 | `ci-real` | Automatic disposable disk | The exact production payload and Compose contract | Real Gladys end to end validation |
 
-Production output is `dist/gladys-assistant-installer-vX.Y.Z-amd64.iso`, its `.iso.sha256`, and `dist/build-info.json`. CI media are deliberately named with their profile and are never release assets.
+Production output is `dist/gladys-assistant-installer-vX.Y.Z-amd64.iso`, its `.iso.sha256`, and `dist/build-info.json`. CI media are deliberately named with their profile and are never release assets. They answer the identity screen with a throwaway `gladys-ci` account so that the installed system matches what an operator gets.
 
 Every build performs fresh signed-metadata authentication. A cached base ISO is accepted only after its SHA256 matches the checksum selected from the freshly verified `SHA256SUMS`. Build sources are never edited in place: the version file and any CI fixtures enter a temporary payload overlay.
 
@@ -78,7 +78,7 @@ Two additional scripts exercise the failure paths that matter for an unattended 
 - `qemu-network-recovery.sh` boots an installed smoke disk with restricted slirp networking, observes the `WAIT_NETWORK` phase, powers off, and resumes the same disk online. Provisioning must finish without any reinstallation.
 - `qemu-power-loss.sh` supplies a QEMU firmware test signal, waits until the `ci-smoke` barrier package is inside its blocking `postinst`, and kills QEMU. Read-only inspection proves the package is unpacked or half configured before reboot; the same disk then resumes without the signal, repairs dpkg, and must end with exactly one installed barrier package, one application container, one Watchtower container, one data directory, and one completion marker.
 
-The scheduled and release jobs additionally install the `ci-real` profile, wait for a real Gladys HTTP handoff, and inspect the stopped disk for Gladys, Watchtower, completion metadata, locked accounts, and the absence of SSH. Tests never log in with a password: disks are inspected powered off, read only, with libguestfs.
+The scheduled and release jobs additionally install the `ci-real` profile, wait for a real Gladys HTTP handoff, and inspect the stopped disk for Gladys, Watchtower, completion metadata, the single CI administrator account, the locked root, the `gladys` hostname, and the enabled OpenSSH server. Tests never log in with a password: disks are inspected powered off, read only, with libguestfs.
 
 ## Continuous integration
 

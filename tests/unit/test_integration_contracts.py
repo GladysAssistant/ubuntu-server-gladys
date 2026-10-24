@@ -378,7 +378,7 @@ fi
         )
         self.assertIn("hostfwd=tcp:127.0.0.1", text)
         self.assertIn("assert_completed_disk", text)
-        self.assertIn("assert_no_password_or_ssh", text)
+        self.assertIn("assert_operator_account_and_ssh", text)
         self.assertNotIn("sshpass", text)
 
     @unittest.skipIf(

@@ -55,7 +55,7 @@ Secure Boot is expected to remain compatible because the Ubuntu signed boot chai
 - [ ] Power interruption during application start recovers.
 - [ ] Recovery leaves exactly one Gladys container, one Watchtower container, one data directory, and one completion marker.
 - [ ] No default account, root password, or known password exists; the only account is the one created on the identity screen.
-- [ ] Declining the OpenSSH server leaves no SSH listener; selecting it allows the created account to log in over SSH.
+- [ ] With the default OpenSSH selection, the created account can log in over SSH with its password; unchecking the server leaves no SSH listener.
 - [ ] The created account can log in on a virtual console (tty2+) while tty1 stays owned by the status display.
 - [ ] `gladys-diagnostics` output is useful and contains no database, token, password, environment secret, or full inspection data.
 
@@ -64,7 +64,8 @@ Secure Boot is expected to remain compatible because the Ubuntu signed boot chai
 - [ ] The language screen appears first with French selected and localizes the remaining supported Subiquity screens after confirmation.
 - [ ] The keyboard screen appears before storage with French AZERTY selected and accepts another layout.
 - [ ] A non-technical tester can identify the destructive disk confirmation.
-- [ ] The identity screen requires creating an account and the SSH screen presents the OpenSSH server unselected by default.
+- [ ] The identity screen requires creating an account and the SSH screen presents the OpenSSH server selected by default.
+- [ ] The machine is named `gladys` after installation, whatever server name was typed on the identity screen.
 - [ ] The setup page follows the selected language; exercise French, English, a third Latin language, Chinese, and one right-to-left language.
 - [ ] tty1 follows supported Latin, Greek, and Cyrillic selections and uses readable English for Arabic, Hebrew, Tibetan, Japanese, and Chinese rather than emitting unusable glyphs.
 - [ ] Long package and container downloads keep a visible activity animation without displaying fabricated byte counts.

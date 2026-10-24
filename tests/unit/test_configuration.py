@@ -32,15 +32,16 @@ class AutoinstallConfigurationTests(unittest.TestCase):
         self.assertEqual(config["keyboard"], {"layout": "fr"})
         self.assertEqual(config["source"]["id"], "ubuntu-server-minimal")
         self.assertEqual(config["storage"]["layout"]["name"], "direct")
-        self.assertEqual(config["ssh"], {"install-server": False})
+        self.assertEqual(config["ssh"], {"install-server": True})
         self.assertNotIn("identity", config)
+        # Subiquity appends list values, so the identity screen account survives.
+        self.assertEqual(config["user-data"]["users"], [])
         self.assertTrue(config["user-data"]["disable_root"])
-        # The account comes from the interactive identity screen; cloud-init
-        # user-data must not override or suppress it.
-        self.assertNotIn("users", config["user-data"])
+        self.assertEqual(config["user-data"]["hostname"], "gladys")
+        # The SSH screen decides password authentication.
         self.assertNotIn("ssh_pwauth", config["user-data"])
 
-    def test_ci_differs_only_in_interactivity_and_account_pin(self) -> None:
+    def test_ci_differs_only_in_interactivity_and_identity(self) -> None:
         production = copy.deepcopy(load_autoinstall("autoinstall.yaml"))
         ci = copy.deepcopy(load_autoinstall("autoinstall-ci.yaml"))
 
@@ -49,8 +50,10 @@ class AutoinstallConfigurationTests(unittest.TestCase):
             ["locale", "keyboard", "storage", "identity", "ssh"],
         )
         self.assertEqual(ci.pop("interactive-sections"), [])
-        self.assertEqual(ci["user-data"].pop("users"), [])
-        self.assertIs(ci["user-data"].pop("ssh_pwauth"), False)
+        identity = ci.pop("identity")
+        self.assertEqual(identity["username"], "gladys-ci")
+        self.assertNotEqual(identity["hostname"], "gladys")
+        self.assertTrue(identity["password"].startswith("$6$"))
         self.assertEqual(ci, production)
 
     def test_late_commands_verify_before_extracting_payload(self) -> None:

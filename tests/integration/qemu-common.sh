@@ -437,35 +437,59 @@ assert_dpkg_barrier_state() {
 	)
 }
 
-assert_no_password_or_ssh() {
+assert_operator_account_and_ssh() {
 	local disk="$1" temporary
 	temporary="$(mktemp -d)"
 	virt-cat -a "$disk" /etc/passwd >"$temporary/passwd"
 	virt-cat -a "$disk" /etc/shadow >"$temporary/shadow"
-	python3 - "$temporary/passwd" "$temporary/shadow" <<'PY'
+	virt-cat -a "$disk" /etc/group >"$temporary/group"
+	virt-cat -a "$disk" /etc/hostname >"$temporary/hostname"
+	virt-cat -a "$disk" /etc/ssh/sshd_config.d/50-cloud-init.conf \
+		>"$temporary/sshd-cloud-init.conf"
+	virt-ls -a "$disk" /usr/sbin/sshd >/dev/null 2>&1 || {
+		printf 'OpenSSH server is not installed\n' >&2
+		return 1
+	}
+	guestfish --ro -a "$disk" -i ls /etc/systemd/system/sockets.target.wants \
+		>"$temporary/socket-units"
+	guestfish --ro -a "$disk" -i ls /etc/systemd/system/multi-user.target.wants \
+		>"$temporary/service-units"
+	python3 - "$temporary" <<'PY'
 import sys
+from pathlib import Path
 
-passwd = [line.rstrip("\n").split(":") for line in open(sys.argv[1], encoding="utf-8")]
+root = Path(sys.argv[1])
+passwd = [line.split(":") for line in (root / "passwd").read_text(encoding="utf-8").splitlines()]
 shadow = {
     fields[0]: fields[1]
-    for line in open(sys.argv[2], encoding="utf-8")
-    if len(fields := line.rstrip("\n").split(":")) >= 2
+    for line in (root / "shadow").read_text(encoding="utf-8").splitlines()
+    if len(fields := line.split(":")) >= 2
 }
+groups = {
+    fields[0]: fields[3].split(",")
+    for line in (root / "group").read_text(encoding="utf-8").splitlines()
+    if len(fields := line.split(":")) >= 4
+}
+# The CI identity stands in for the account an operator creates.
 ordinary = [fields[0] for fields in passwd if 1000 <= int(fields[2]) < 65534]
-if ordinary:
-    raise SystemExit(f"unexpected ordinary accounts: {ordinary}")
-for fields in passwd:
-    name, uid = fields[0], int(fields[2])
-    if uid == 0 or 1000 <= uid < 65534:
-        password = shadow.get(name, "")
-        if not password.startswith(("!", "*")):
-            raise SystemExit(f"account is not locked: {name}")
+if ordinary != ["gladys-ci"]:
+    raise SystemExit(f"expected only the operator account, found: {ordinary}")
+if not shadow.get("gladys-ci", "").startswith("$6$"):
+    raise SystemExit("operator account has no usable password")
+if "gladys-ci" not in groups.get("sudo", []):
+    raise SystemExit("operator account is not an administrator")
+if not shadow.get("root", "").startswith(("!", "*")):
+    raise SystemExit("root is not locked")
+if (root / "hostname").read_text(encoding="utf-8").strip() != "gladys":
+    raise SystemExit("hostname typed on the identity screen was not replaced by gladys")
+if "PasswordAuthentication yes" not in (root / "sshd-cloud-init.conf").read_text(encoding="utf-8"):
+    raise SystemExit("SSH password authentication does not follow the SSH screen default")
+units = (root / "socket-units").read_text(encoding="utf-8").split()
+units += (root / "service-units").read_text(encoding="utf-8").split()
+if "ssh.socket" not in units and "ssh.service" not in units:
+    raise SystemExit("OpenSSH server is installed but not enabled")
 PY
 	rm -rf -- "$temporary"
-	if virt-ls -a "$disk" /usr/sbin/sshd >/dev/null 2>&1; then
-		printf 'OpenSSH server is unexpectedly installed\n' >&2
-		return 1
-	fi
 }
 
 assert_single_resources() {

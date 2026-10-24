@@ -45,13 +45,13 @@ The completion marker is `/var/lib/gladys-installer/completed`. The sibling `sta
 - Watchtower only updates Gladys and itself. It never updates containers created by Gladys integrations, which Gladys manages, or other containers on the host; a container opts in with the label `com.centurylinklabs.watchtower.enable=true`.
 - Container logs are rotated at 10 MB per file; the Docker default in `/etc/docker/daemon.json` keeps three files.
 - Ubuntu installs security updates through `unattended-upgrades`. Automatic reboot and Ubuntu release upgrades are disabled.
-- The only account is the one created during installation, and the OpenSSH server exists only if it was selected then. Root stays locked and no default credentials exist: see [SECURITY.md](SECURITY.md).
+- The only account is the one created during installation. The OpenSSH server is installed unless it was unchecked then. Root stays locked and no default credentials exist: see [SECURITY.md](SECURITY.md).
 
 ## Diagnostics
 
 `gladys-diagnostics` prints safe, non-secret support information: installer and Ubuntu versions, boot mode, network state, disk usage, Docker and Compose status, service states, and recent first boot journal lines.
 
-Log in with the account created during installation — on a virtual console with an attached keyboard (for example Ctrl+Alt+F2; tty1 is reserved for the status display) or over SSH if the OpenSSH server was selected — and run:
+Log in with the account created during installation — on a virtual console with an attached keyboard (for example Ctrl+Alt+F2; tty1 is reserved for the status display) or over SSH (`ssh <username>@gladys.local`, or the IPv4 address) unless the OpenSSH server was unchecked — and run:
 
 ```bash
 sudo gladys-diagnostics

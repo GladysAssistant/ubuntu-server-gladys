@@ -43,7 +43,8 @@ GitHub Actions defaults to `contents: read`. External actions are pinned to immu
 ## Installed system controls
 
 - Production requires the user to select and confirm storage. Only disposable CI media select storage automatically.
-- Root is locked and no known account or password exists: the only account is the one the operator creates interactively on the identity screen. The OpenSSH server is off by default and installed only when the operator opts in on the SSH screen; unattended CI media remain accountless and without SSH.
+- Root is locked and no known account or password exists: the only account is the one the operator creates interactively on the identity screen. Unattended CI media use a throwaway account instead; they are never published, and production validation and ISO inspection reject any embedded identity.
+- The OpenSSH server is selected by default so that the appliance can be maintained without a screen. As on a standard Ubuntu Server, it accepts the operator's password unless keys are imported on the SSH screen. Password login over the local network is an accepted risk; operators who do not want it can uncheck the server or import keys.
 - TLS certificate verification remains enabled everywhere. Internet readiness combines DNS and verified TLS rather than ICMP alone.
 - There is no `curl | sh`, no unsigned remote code, no telemetry, no remote asset, no public debug endpoint, no directory listing, no Docker TCP socket, and no arbitrary web filesystem path.
 - The setup server runs as a systemd dynamic user with strict sandboxing (`ProtectSystem=strict`, private devices and tmp, memory and task limits) and holds only `CAP_NET_BIND_SERVICE`. Its state response is schema-limited; error details stay in journald.
