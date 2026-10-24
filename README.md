@@ -11,7 +11,7 @@ The installer is a remastered Ubuntu Server 26.04 LTS image. You flash it to a U
 | Base system | Ubuntu Server 26.04 LTS amd64, latest point release, authenticated against Canonical signatures on every build |
 | Target hardware | UEFI amd64 mini-PCs with an internal SSD or NVMe and wired Ethernet |
 | Application | `gladysassistant/gladys:v5`, pulled on first boot, never embedded in the ISO |
-| Application updates | A pinned Watchtower release follows the moving `v5` channel, updates only the Gladys container, and cleans replaced images |
+| Application updates | Watchtower follows the moving `v5` channel, updates only the Gladys container and itself, and cleans replaced images |
 | System updates | `unattended-upgrades`, security updates only, no automatic reboot, no release upgrade |
 | Data | Persistent Gladys data lives in `/var/lib/gladysassistant` |
 | Remote access | None. No SSH server, no default account, root locked, no known password |

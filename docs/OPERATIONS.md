@@ -42,8 +42,7 @@ The completion marker is `/var/lib/gladys-installer/completed`. The sibling `sta
 
 - Gladys data persists in `/var/lib/gladysassistant` and survives container updates and reboots.
 - Gladys follows the moving `v5` channel. Watchtower pulls compatible updates automatically and cleans replaced images. No manual action and no installer rebuild are needed for ordinary Gladys updates.
-- Watchtower only updates Gladys. It does not update itself, containers created by Gladys integrations, or other containers on the host; a container opts in with the label `com.centurylinklabs.watchtower.enable=true`.
-- Watchtower is pinned to an exact version, and installer releases never modify installed machines. Moving to a newer Watchtower means editing its `image` line in `/opt/gladys/compose.yaml` and recreating it with `docker compose -f /opt/gladys/compose.yaml up -d watchtower`.
+- Watchtower only updates Gladys and itself. It never updates containers created by Gladys integrations, which Gladys manages, or other containers on the host; a container opts in with the label `com.centurylinklabs.watchtower.enable=true`.
 - Container logs are rotated at 10 MB per file; the Docker default in `/etc/docker/daemon.json` keeps three files.
 - Ubuntu installs security updates through `unattended-upgrades`. Automatic reboot and Ubuntu release upgrades are disabled.
 - The appliance has no SSH server, no ordinary account, and a locked root. This is intentional: see [SECURITY.md](SECURITY.md).

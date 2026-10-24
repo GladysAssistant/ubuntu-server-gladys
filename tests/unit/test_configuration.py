@@ -79,19 +79,20 @@ class ComposeConfigurationTests(unittest.TestCase):
         self.assertIn("/var/lib/gladysassistant:/var/lib/gladysassistant", gladys["volumes"])
         self.assertIsNone(re.search(r"gladysassistant/gladys:v5\.\d", text))
 
-    def test_watchtower_is_pinned_and_updates_only_gladys(self) -> None:
+    def test_watchtower_updates_only_gladys_and_itself(self) -> None:
         compose = yaml.safe_load(
             (ROOT / "payload" / "opt" / "gladys" / "compose.yaml").read_text(encoding="utf-8")
         )
-        gladys = compose["services"]["gladys"]
         watchtower = compose["services"]["watchtower"]
 
-        self.assertRegex(
-            watchtower["image"], r"^nickfedor/watchtower:\d+\.\d+\.\d+@sha256:[0-9a-f]{64}$"
-        )
+        # A moving tag keeps Watchtower compatible with Docker API changes.
+        self.assertEqual(watchtower["image"], "nickfedor/watchtower")
         self.assertIn("--label-enable", watchtower["command"])
-        self.assertEqual(gladys["labels"], {"com.centurylinklabs.watchtower.enable": "true"})
-        self.assertNotIn("labels", watchtower)
+        for name, service in compose["services"].items():
+            with self.subTest(service=name):
+                self.assertEqual(
+                    service["labels"], {"com.centurylinklabs.watchtower.enable": "true"}
+                )
 
     def test_container_logs_are_rotated(self) -> None:
         compose = yaml.safe_load(
