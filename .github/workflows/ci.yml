@@ -1,9 +1,12 @@
 name: CI
 
+# Documentation never enters the media; workflow_dispatch still runs everything.
 on:
   pull_request:
+    paths-ignore: ['**.md', 'docs/**']
   push:
     branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
   workflow_dispatch:
 
 permissions:

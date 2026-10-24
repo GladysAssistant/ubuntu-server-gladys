@@ -86,7 +86,7 @@ Three workflows run in GitHub Actions:
 
 | Workflow | Trigger | Jobs |
 | --- | --- | --- |
-| `ci.yml` | Push and pull request | lint, unit tests, config validation, authenticated builds, finished ISO inspection, QEMU install, QEMU first boot |
+| `ci.yml` | Push and pull request, except documentation-only changes (`*.md`, `docs/`) | lint, unit tests, config validation, authenticated builds, finished ISO inspection, QEMU install, QEMU first boot |
 | `nightly.yml` | Weekly schedule | Full ecosystem integration against current Canonical metadata and the live Gladys channel |
 | `release.yml` | `vX.Y.Z` tag push | Quality gates, build and inspection, real Gladys first boot, network recovery, power loss recovery, then publish |
 
