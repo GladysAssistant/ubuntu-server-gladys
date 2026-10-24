@@ -446,7 +446,7 @@ assert_operator_account_and_ssh() {
 	virt-cat -a "$disk" /etc/hostname >"$temporary/hostname"
 	virt-cat -a "$disk" /etc/ssh/sshd_config.d/50-cloud-init.conf \
 		>"$temporary/sshd-cloud-init.conf"
-	virt-ls -a "$disk" /usr/sbin/sshd >/dev/null 2>&1 || {
+	[[ "$(guestfish --ro -a "$disk" -i is-file /usr/sbin/sshd followsymlinks:true)" == "true" ]] || {
 		printf 'OpenSSH server is not installed\n' >&2
 		return 1
 	}
