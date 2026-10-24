@@ -14,7 +14,10 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 class WorkflowContractTests(unittest.TestCase):
     def test_all_external_actions_are_full_sha_pinned(self) -> None:
         files = list(WORKFLOWS.glob("*.yml"))
-        self.assertEqual({path.name for path in files}, {"ci.yml", "nightly.yml", "release.yml"})
+        self.assertEqual(
+            {path.name for path in files},
+            {"ci.yml", "nightly.yml", "release.yml", "test-image.yml"},
+        )
         for path in files:
             for line in path.read_text(encoding="utf-8").splitlines():
                 if "uses:" not in line:
@@ -41,6 +44,7 @@ class WorkflowContractTests(unittest.TestCase):
         expected_jobs = {
             "ci.yml": ("build-iso", "inspect-iso"),
             "release.yml": ("build-and-inspect",),
+            "test-image.yml": ("build-and-inspect",),
             "nightly.yml": ("full-integration",),
         }
         for filename, jobs in expected_jobs.items():
@@ -65,7 +69,7 @@ class WorkflowContractTests(unittest.TestCase):
 
     def test_release_is_tag_gated_and_only_publish_job_has_write_permissions(self) -> None:
         text = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
-        self.assertIn("tags: ['v*.*.*']", text)
+        self.assertIn("tags: ['v*.*.*', '!v*.*.*-*']", text)
         self.assertIn("^v[0-9]+\\.[0-9]+\\.[0-9]+$", text)
         self.assertEqual(text.count("contents: write"), 1)
         self.assertEqual(text.count("id-token: write"), 1)
@@ -73,6 +77,23 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("actions/attest@", text)
         self.assertIn("gh release create", text)
         self.assertIn('[[ "$GITHUB_REF_NAME" == "v$version" ]]', text)
+        self.assertIn("publish-r2.sh", text)
+        self.assertIn("--channel production", text)
+        self.assertNotIn("split", text)
+
+    def test_test_image_is_prerelease_tag_gated_and_read_only(self) -> None:
+        text = (WORKFLOWS / "test-image.yml").read_text(encoding="utf-8")
+        workflow = yaml.safe_load(text)
+        self.assertIn("tags: ['v*.*.*-*']", text)
+        self.assertIn('[[ "$GITHUB_REF_NAME" == "v$version-"* ]]', text)
+        self.assertNotIn("write", text)
+        self.assertNotIn("gh release", text)
+        self.assertIn("--profile ci-real", text)
+        self.assertEqual(
+            set(workflow["jobs"]["publish-test"]["needs"]),
+            {"quality-gates", "build-and-inspect", "real-gladys"},
+        )
+        self.assertIn("--channel test", text)
 
 
 if __name__ == "__main__":

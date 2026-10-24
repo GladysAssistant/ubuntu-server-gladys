@@ -24,9 +24,9 @@ The ISO never embeds a numbered Gladys release, a container image, a known passw
 
 ## Installing on a mini-PC
 
-1. Download all the release assets: the numbered `.iso.part*` files, the `.sha256` file, and `build-info.json` (GitHub caps individual release assets at 2 GiB, so the ISO ships in parts).
-2. Reassemble the ISO and verify its checksum and, when available, the GitHub artifact attestation as described in [docs/RELEASE.md](docs/RELEASE.md).
-3. Flash the reassembled ISO to a USB drive with a raw image writer such as balenaEtcher or `dd`.
+1. Download the latest installer image from <https://download.gladysassistant.com/gladys-assistant-installer-amd64.iso>, together with its [`.sha256`](https://download.gladysassistant.com/gladys-assistant-installer-amd64.iso.sha256).
+2. Verify its checksum and, when available, the GitHub artifact attestation as described in [docs/RELEASE.md](docs/RELEASE.md).
+3. Flash the ISO to a USB drive with a raw image writer such as balenaEtcher or `dd`.
 4. Boot the target machine in UEFI mode. GRUB shows **Install Gladys Assistant** and starts it automatically after a visible three second timeout.
 5. Choose the installation language and keyboard layout. French and French AZERTY are preselected.
 6. Select the intended internal SSD or NVMe and explicitly confirm its erasure. Production media never select or erase a disk unattended.
