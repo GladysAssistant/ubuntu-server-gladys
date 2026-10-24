@@ -14,7 +14,7 @@ The installer is a remastered Ubuntu Server 26.04 LTS image. You flash it to a U
 | Application updates | Watchtower follows the moving `v5` channel, updates only the Gladys container and itself, and cleans replaced images |
 | System updates | `unattended-upgrades`, security updates only, no automatic reboot, no release upgrade |
 | Data | Persistent Gladys data lives in `/var/lib/gladysassistant` |
-| Remote access | None. No SSH server, no default account, root locked, no known password |
+| Remote access | You create your own administrator account at install time. The OpenSSH server is selected by default and can be unchecked; root stays locked and the ISO embeds no account or password |
 
 ## What this is, and what it is not
 
@@ -30,9 +30,10 @@ The ISO never embeds a numbered Gladys release, a container image, a known passw
 4. Boot the target machine in UEFI mode. GRUB shows **Install Gladys Assistant** and starts it automatically after a visible three second timeout.
 5. Choose the installation language and keyboard layout. French and French AZERTY are preselected.
 6. Select the intended internal SSD or NVMe and explicitly confirm its erasure. Production media never select or erase a disk unattended.
-7. Let the installation finish, remove the USB drive, and leave Ethernet connected.
-8. Follow the progress on the tty1 console or on the setup web page. Before Gladys starts, the console shows the IPv4 address of the setup page.
-9. Wait for the console to show **Ready**, then open `http://gladysassistant.local`. The displayed IPv4 address remains the fallback when the client network does not support mDNS.
+7. Create your administrator account (name, username, password). The installer also asks for a server name, but the machine is always named `gladys`. On the next screen the OpenSSH server is selected by default: keep it to log in remotely with your password or with keys imported from GitHub or Launchpad, or uncheck it to keep the appliance without remote shell access. The ISO ships no account or password of its own.
+8. Let the installation finish, remove the USB drive, and leave Ethernet connected.
+9. Follow the progress on the tty1 console or on the setup web page. Before Gladys starts, the console shows the IPv4 address of the setup page.
+10. Wait for the console to show **Ready**, then open `http://gladysassistant.local`. The displayed IPv4 address remains the fallback when the client network does not support mDNS.
 
 Provisioning requires Internet access over Ethernet. The Ubuntu installation itself can finish offline; first boot then waits safely in the `WAIT_NETWORK` phase and resumes automatically as soon as connectivity appears. Version 1 has no Wi-Fi setup UI.
 

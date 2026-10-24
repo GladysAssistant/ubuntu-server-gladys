@@ -133,10 +133,14 @@ if not isinstance(document, dict) or set(document) != {"autoinstall"}:
     raise SystemExit("finished ISO contains an invalid Autoinstall document")
 config = document["autoinstall"]
 expected_interactive = (
-    ["locale", "keyboard", "storage"] if expected_profile == "production" else []
+    ["locale", "keyboard", "storage", "identity", "ssh"]
+    if expected_profile == "production"
+    else []
 )
 if config.get("interactive-sections") != expected_interactive:
     raise SystemExit("finished ISO contains the wrong Autoinstall profile")
+if expected_profile == "production" and "identity" in config:
+    raise SystemExit("finished production ISO embeds a known identity")
 with open(profile_path, encoding="utf-8") as handle:
     metadata = json.load(handle)
 if metadata.get("schema") != 1 or metadata.get("profile") != expected_profile:

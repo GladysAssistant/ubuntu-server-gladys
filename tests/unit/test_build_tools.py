@@ -420,6 +420,7 @@ class AutoinstallValidatorTests(unittest.TestCase):
             name: {}
             for name in (
                 "apt",
+                "identity",
                 "interactive-sections",
                 "late-commands",
                 "shutdown",
@@ -1056,11 +1057,39 @@ class AutoinstallValidatorTests(unittest.TestCase):
             catalog = root / "catalog.yaml"
             production.write_text(
                 "autoinstall:\n  version: 1\n"
-                "  interactive-sections: [locale, keyboard, storage]\n",
+                "  interactive-sections: [locale, keyboard, storage, identity, ssh]\n",
                 encoding="utf-8",
             )
             ci.write_text(
-                "autoinstall:\n  version: 1\n  interactive-sections: []\n  locale: en_US.UTF-8\n",
+                "autoinstall:\n  version: 1\n  interactive-sections: []\n"
+                "  identity: {hostname: ci, username: ci, password: x}\n"
+                "  locale: en_US.UTF-8\n",
+                encoding="utf-8",
+            )
+            schema.write_text(
+                json.dumps(self._authoritative_schema()), encoding="utf-8"
+            )
+            catalog.write_text("- id: ubuntu-server-minimal\n", encoding="utf-8")
+
+            with self.assertRaises(validate_config.ConfigurationError):
+                validate_config.validate_repository_configs(
+                    production, ci, schema, catalog, enforce_safety=False
+                )
+
+    def test_validator_requires_ci_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            production = root / "production.yaml"
+            ci = root / "ci.yaml"
+            schema = root / "schema.json"
+            catalog = root / "catalog.yaml"
+            production.write_text(
+                "autoinstall:\n  version: 1\n"
+                "  interactive-sections: [locale, keyboard, storage, identity, ssh]\n",
+                encoding="utf-8",
+            )
+            ci.write_text(
+                "autoinstall:\n  version: 1\n  interactive-sections: []\n",
                 encoding="utf-8",
             )
             schema.write_text(

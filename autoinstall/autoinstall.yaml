@@ -4,6 +4,8 @@ autoinstall:
     - locale
     - keyboard
     - storage
+    - identity
+    - ssh
   locale: fr_FR.UTF-8
   keyboard:
     layout: fr
@@ -14,7 +16,7 @@ autoinstall:
     layout:
       name: direct
   ssh:
-    install-server: false
+    install-server: true
   kernel-crash-dumps:
     enabled: false
   apt:
@@ -25,7 +27,6 @@ autoinstall:
     preserve_hostname: false
     manage_etc_hosts: true
     disable_root: true
-    ssh_pwauth: false
     users: []
   late-commands:
     - [sh, -c, "cd /cdrom/gladys && sha256sum -c gladys-payload.tar.sha256"]

@@ -20,32 +20,40 @@ def load_autoinstall(name: str) -> dict:
 
 
 class AutoinstallConfigurationTests(unittest.TestCase):
-    def test_production_prompts_for_language_keyboard_and_storage(self) -> None:
+    def test_production_prompts_for_operator_choices(self) -> None:
         config = load_autoinstall("autoinstall.yaml")
 
         self.assertEqual(config["version"], 1)
         self.assertEqual(
-            config["interactive-sections"], ["locale", "keyboard", "storage"]
+            config["interactive-sections"],
+            ["locale", "keyboard", "storage", "identity", "ssh"],
         )
         self.assertEqual(config["locale"], "fr_FR.UTF-8")
         self.assertEqual(config["keyboard"], {"layout": "fr"})
         self.assertEqual(config["source"]["id"], "ubuntu-server-minimal")
         self.assertEqual(config["storage"]["layout"]["name"], "direct")
-        self.assertEqual(config["ssh"], {"install-server": False})
+        self.assertEqual(config["ssh"], {"install-server": True})
         self.assertNotIn("identity", config)
+        # Subiquity appends list values, so the identity screen account survives.
         self.assertEqual(config["user-data"]["users"], [])
         self.assertTrue(config["user-data"]["disable_root"])
-        self.assertFalse(config["user-data"]["ssh_pwauth"])
+        self.assertEqual(config["user-data"]["hostname"], "gladys")
+        # The SSH screen decides password authentication.
+        self.assertNotIn("ssh_pwauth", config["user-data"])
 
-    def test_ci_differs_only_in_interactive_sections(self) -> None:
+    def test_ci_differs_only_in_interactivity_and_identity(self) -> None:
         production = copy.deepcopy(load_autoinstall("autoinstall.yaml"))
         ci = copy.deepcopy(load_autoinstall("autoinstall-ci.yaml"))
 
         self.assertEqual(
             production.pop("interactive-sections"),
-            ["locale", "keyboard", "storage"],
+            ["locale", "keyboard", "storage", "identity", "ssh"],
         )
         self.assertEqual(ci.pop("interactive-sections"), [])
+        identity = ci.pop("identity")
+        self.assertEqual(identity["username"], "gladys-ci")
+        self.assertNotEqual(identity["hostname"], "gladys")
+        self.assertTrue(identity["password"].startswith("$6$"))
         self.assertEqual(ci, production)
 
     def test_late_commands_verify_before_extracting_payload(self) -> None:

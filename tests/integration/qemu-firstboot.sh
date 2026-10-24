@@ -57,7 +57,7 @@ stop_vm
 trap - EXIT
 
 assert_completed_disk "$DISK"
-assert_no_password_or_ssh "$DISK"
+assert_operator_account_and_ssh "$DISK"
 if [[ "$PROFILE" == "ci-smoke" ]]; then
 	assert_single_resources "$DISK" gladys-test-app
 else

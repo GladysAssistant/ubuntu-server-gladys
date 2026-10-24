@@ -19,7 +19,7 @@ class ConfigurationError(ValueError):
 
 
 CANONICAL_VALIDATOR_SOURCE_ID = "synthesized"
-PRODUCTION_INTERACTIVE_SECTIONS = ["locale", "keyboard", "storage"]
+PRODUCTION_INTERACTIVE_SECTIONS = ["locale", "keyboard", "storage", "identity", "ssh"]
 
 
 def _load(path: Path) -> dict:
@@ -37,7 +37,7 @@ def _load(path: Path) -> dict:
 def _safety_checks(config: dict) -> None:
     if config.get("interactive-sections") != PRODUCTION_INTERACTIVE_SECTIONS:
         raise ConfigurationError(
-            "production must make locale, keyboard, and storage interactive"
+            "production must make locale, keyboard, storage, identity, and ssh interactive"
         )
     if config.get("locale") != "fr_FR.UTF-8":
         raise ConfigurationError("production locale default must be French")
@@ -48,14 +48,14 @@ def _safety_checks(config: dict) -> None:
     if config.get("storage", {}).get("layout", {}).get("name") != "direct":
         raise ConfigurationError("production storage layout must be direct")
     if "identity" in config:
-        raise ConfigurationError("production must not create a known identity")
-    if config.get("ssh") != {"install-server": False}:
-        raise ConfigurationError("SSH server must remain disabled")
+        raise ConfigurationError("production must not embed a known identity")
+    if config.get("ssh") != {"install-server": True}:
+        raise ConfigurationError("the SSH screen default must install the server")
     user_data = config.get("user-data", {})
     if user_data.get("users") != [] or user_data.get("disable_root") is not True:
         raise ConfigurationError("production must contain no ordinary user and must lock root")
-    if user_data.get("ssh_pwauth") is not False:
-        raise ConfigurationError("SSH password authentication must be disabled")
+    if "ssh_pwauth" in user_data:
+        raise ConfigurationError("SSH password authentication must follow the SSH screen")
     commands = config.get("late-commands", [])
     rendered = "\n".join(
         command if isinstance(command, str) else " ".join(command) for command in commands
@@ -72,6 +72,7 @@ def _safety_checks(config: dict) -> None:
 def _require_authoritative_iso_schema(schema: object) -> dict:
     required_properties = {
         "apt",
+        "identity",
         "interactive-sections",
         "late-commands",
         "shutdown",
@@ -127,12 +128,18 @@ def validate_repository_configs(
         != PRODUCTION_INTERACTIVE_SECTIONS
     ):
         raise ConfigurationError(
-            "production interactive sections must contain locale, keyboard, and storage"
+            "production interactive sections must contain locale, keyboard, storage, "
+            "identity, and ssh"
         )
     if ci_comparable.pop("interactive-sections", None) != []:
         raise ConfigurationError("CI interactive sections must be empty")
+    # Unattended CI media answer the identity screen with a throwaway account.
+    if not isinstance(ci_comparable.pop("identity", None), dict):
+        raise ConfigurationError("CI must provide the account the identity screen collects")
     if production_comparable != ci_comparable:
-        raise ConfigurationError("production and CI Autoinstall differ outside interactivity")
+        raise ConfigurationError(
+            "production and CI Autoinstall differ outside interactivity and the CI identity"
+        )
     try:
         buildlib.require_minimal_source(catalog_path.read_text(encoding="utf-8"))
     except buildlib.BuildInputError as exc:
