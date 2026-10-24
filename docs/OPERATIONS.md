@@ -45,6 +45,7 @@ The completion marker is `/var/lib/gladys-installer/completed`. The sibling `sta
 - Watchtower only updates Gladys and itself. It never updates containers created by Gladys integrations, which Gladys manages, or other containers on the host; a container opts in with the label `com.centurylinklabs.watchtower.enable=true`.
 - Container logs are rotated at 10 MB per file; the Docker default in `/etc/docker/daemon.json` keeps three files.
 - Ubuntu installs security updates through `unattended-upgrades`. Automatic reboot and Ubuntu release upgrades are disabled.
+- Kernel and core library updates only take effect after a reboot, which never happens automatically. Ubuntu creates `/var/run/reboot-required` when one is pending; log in as described under [Diagnostics](#diagnostics) and run `sudo reboot`. Gladys and Watchtower start again on their own.
 - The only account is the one created during installation. The OpenSSH server is installed unless it was unchecked then. Root stays locked and no default credentials exist: see [SECURITY.md](SECURITY.md).
 
 ## Diagnostics
