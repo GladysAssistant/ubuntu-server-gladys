@@ -7,7 +7,7 @@ Public releases are explicit version-tag operations. A successful weekly integra
 1. Confirm the intended installer version is exactly the semantic version in `VERSION`. Gladys has an independent moving `v5` channel and must never appear as a numbered release in any metadata.
 2. Review dependency and pinned-action updates, the current Canonical 26.04 source discovery, and the latest scheduled real-Gladys results.
 3. Run the static checks, the unit tests, all three profile builds, finished production inspection, a UEFI install, a real Gladys and Watchtower first boot, offline recovery, and forced power loss recovery.
-4. Complete the applicable physical tests in [HARDWARE-TEST-CHECKLIST.md](HARDWARE-TEST-CHECKLIST.md). Never convert unchecked hardware into a support claim.
+4. Push a test tag such as `vX.Y.Z-rc.1` to publish the test image, then complete the applicable physical tests in [HARDWARE-TEST-CHECKLIST.md](HARDWARE-TEST-CHECKLIST.md) with it. Never convert unchecked hardware into a support claim.
 5. Create and push an annotated tag `vX.Y.Z` that exactly equals `VERSION`.
 
 ## Gates enforced by the workflow
@@ -30,42 +30,46 @@ Only the publishing job receives write permissions; everything else runs with re
 
 ## Published artifacts
 
-GitHub caps release assets at 2 GiB per file, which is below the size of the installer image, so the ISO is published as numbered parts. Exactly these files are attached to a release:
+GitHub caps release assets at 2 GiB per file, which is below the size of the installer image, so the ISO itself is published on Cloudflare R2 (bucket `gladys-assistant-os-images`, served at `download.gladysassistant.com`). Each channel has one fixed object that every publication overwrites, so the bucket never keeps old images:
+
+| Channel | Trigger | Image | Checksum |
+| --- | --- | --- | --- |
+| Production | `vX.Y.Z` tag | `https://download.gladysassistant.com/gladys-assistant-installer-amd64.iso` | same URL plus `.sha256` |
+| Test | `vX.Y.Z-suffix` tag, for example `v0.2.0-rc.1` | `https://download.gladysassistant.com/test/gladys-assistant-installer-amd64.iso` | same URL plus `.sha256` |
+
+The R2 `.sha256` names the fixed object. Objects are uploaded with `Cache-Control: no-cache` so the CDN never serves a stale checksum. A test tag runs `test-image.yml`: the same quality gates, the production and `ci-real` builds, and a real Gladys first boot. It creates no GitHub release.
+
+Exactly these files are attached to a GitHub release:
 
 ```text
-gladys-assistant-installer-vX.Y.Z-amd64.iso.part1
-gladys-assistant-installer-vX.Y.Z-amd64.iso.part2
 gladys-assistant-installer-vX.Y.Z-amd64.iso.sha256
 build-info.json
 ```
 
-The SHA256 and the provenance attestation both cover the reassembled ISO, not the parts. `build-info.json` records the installer version, the full Git commit, the architecture, the Ubuntu series, the selected Ubuntu ISO filename and SHA256, and the UTC build timestamp. It contains no Gladys version. The publish job checks the `.sha256`, splits the verified ISO, creates GitHub artifact provenance for the whole image, and uses `gh release create --verify-tag`.
+`build-info.json` records the installer version, the full Git commit, the architecture, the Ubuntu series, the selected Ubuntu ISO filename and SHA256, and the UTC build timestamp. It contains no Gladys version. The publish job checks the `.sha256`, creates GitHub artifact provenance for the image, uploads it to R2, and uses `gh release create --verify-tag`.
+
+The workflows need three repository secrets: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` (S3-compatible credentials of an R2 API token with write access to the bucket).
 
 ## Verifying a release as a user
 
-Download every asset, reassemble the image, then verify the checksum from the containing directory:
+Download the image and its checksum, then verify from the containing directory:
 
 ```bash
-cat gladys-assistant-installer-vX.Y.Z-amd64.iso.part* > gladys-assistant-installer-vX.Y.Z-amd64.iso
-sha256sum -c gladys-assistant-installer-vX.Y.Z-amd64.iso.sha256
-```
-
-On Windows PowerShell, reassemble with:
-
-```powershell
-cmd /c copy /b "gladys-assistant-installer-vX.Y.Z-amd64.iso.part1"+"gladys-assistant-installer-vX.Y.Z-amd64.iso.part2" "gladys-assistant-installer-vX.Y.Z-amd64.iso"
+curl -fLO https://download.gladysassistant.com/gladys-assistant-installer-amd64.iso
+curl -fLO https://download.gladysassistant.com/gladys-assistant-installer-amd64.iso.sha256
+sha256sum -c gladys-assistant-installer-amd64.iso.sha256
 ```
 
 For a public repository, verify GitHub provenance with an authenticated, current GitHub CLI:
 
 ```bash
 gh attestation verify \
-  gladys-assistant-installer-vX.Y.Z-amd64.iso \
-  --repo OWNER/REPOSITORY
+  gladys-assistant-installer-amd64.iso \
+  --repo GladysAssistant/ubuntu-server-gladys
 ```
 
 Both checks are required release evidence: the SHA256 detects byte changes, and the attestation binds the subject digest to the GitHub Actions build identity. Inspect `build-info.json` and confirm its `git_commit` matches the release tag before distributing the image further.
 
 ## Post-release
 
-Flash the exact released ISO and repeat a physical UEFI and Ethernet installation on representative hardware. Record the results and limitations. Never silently replace assets on an existing tag: fixes require a new installer version and a new tag.
+Flash the exact released ISO and repeat a physical UEFI and Ethernet installation on representative hardware. Record the results and limitations. Never silently replace assets on an existing tag: fixes require a new installer version and a new tag. Only the latest release is downloadable from R2.

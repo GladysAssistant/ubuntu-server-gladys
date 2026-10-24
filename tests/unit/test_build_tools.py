@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import io
 import json
@@ -1599,6 +1600,76 @@ class CiBarrierPackageTests(unittest.TestCase):
                 b"/usr/lib/gladys-installer/apt-power-loss-barrier.py",
                 postinst.read(),
             )
+
+
+@unittest.skipIf(
+    os.name == "nt" or shutil.which("sha256sum") is None,
+    "requires a POSIX shell with sha256sum",
+)
+class PublishR2Tests(unittest.TestCase):
+    def _publish(self, channel: str) -> tuple[subprocess.CompletedProcess, list[str], str]:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            aws = fake_bin / "aws"
+            aws.write_text(
+                '#!/usr/bin/env bash\n'
+                'printf "%s\\n" "$*" >>"$AWS_LOG"\n'
+                'if [[ "$3" == *.sha256 ]]; then cp -- "$3" "$AWS_LOG.sha256"; fi\n',
+                encoding="utf-8",
+            )
+            aws.chmod(0o755)
+            iso = root / "gladys-assistant-installer-v1.2.3-amd64.iso"
+            iso.write_bytes(b"iso")
+            digest = hashlib.sha256(b"iso").hexdigest()
+            (root / f"{iso.name}.sha256").write_text(f"{digest}  {iso.name}\n", encoding="utf-8")
+            log = root / "aws.log"
+            result = subprocess.run(
+                ["bash", bash_path(SCRIPTS / "publish-r2.sh"), "--iso", str(iso), "--channel", channel],
+                env={
+                    **os.environ,
+                    "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+                    "AWS_LOG": str(log),
+                    "R2_ACCOUNT_ID": "account",
+                    "AWS_ACCESS_KEY_ID": "key",
+                    "AWS_SECRET_ACCESS_KEY": "secret",
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            calls = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+            checksum = (
+                (root / "aws.log.sha256").read_text(encoding="utf-8")
+                if (root / "aws.log.sha256").exists()
+                else ""
+            )
+            return result, calls, f"{digest}|{checksum}"
+
+    def test_channels_overwrite_one_fixed_object_each(self) -> None:
+        for channel, prefix in (("production", ""), ("test", "test/")):
+            with self.subTest(channel=channel):
+                result, calls, digests = self._publish(channel)
+                self.assertEqual(0, result.returncode, result.stderr)
+                target = f"s3://gladys-assistant-os-images/{prefix}gladys-assistant-installer-amd64.iso"
+                self.assertEqual(len(calls), 2)
+                self.assertIn(f" {target} ", calls[0])
+                self.assertIn(f" {target}.sha256 ", calls[1])
+                for call in calls:
+                    self.assertIn("--endpoint-url https://account.r2.cloudflarestorage.com", call)
+                    self.assertIn("--cache-control no-cache", call)
+                digest, checksum = digests.split("|")
+                self.assertEqual(checksum, f"{digest}  gladys-assistant-installer-amd64.iso\n")
+                self.assertEqual(
+                    result.stdout.strip(),
+                    f"https://download.gladysassistant.com/{prefix}gladys-assistant-installer-amd64.iso",
+                )
+
+    def test_rejects_unknown_channel(self) -> None:
+        result, calls, _ = self._publish("nightly")
+        self.assertEqual(result.returncode, 64)
+        self.assertEqual(calls, [])
 
 
 if __name__ == "__main__":

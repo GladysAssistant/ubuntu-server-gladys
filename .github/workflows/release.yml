@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    tags: ['v*.*.*']
+    tags: ['v*.*.*', '!v*.*.*-*']
 
 permissions:
   contents: read
@@ -175,23 +175,25 @@ jobs:
           [[ "$GITHUB_REF_NAME" == "v$version" ]]
           iso="dist/gladys-assistant-installer-v${version}-amd64.iso"
           (cd dist && sha256sum -c --status "$(basename "$iso").sha256")
-          # GitHub release assets are capped at 2 GiB per file, below the ISO
-          # size, so the image is published as numbered parts. The SHA256 and
-          # the attestation both cover the reassembled ISO.
-          split --bytes=1900M --numeric-suffixes=1 --suffix-length=1 -- "$iso" "$iso.part"
           echo "iso=$iso" >> "$GITHUB_OUTPUT"
           echo "checksum=$iso.sha256" >> "$GITHUB_OUTPUT"
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: ${{ steps.release.outputs.iso }}
+      # GitHub caps release assets at 2 GiB, below the ISO size, so the image
+      # itself lives on Cloudflare R2 at a fixed, overwritten path.
+      - name: Upload the ISO to the production R2 path
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: bash scripts/publish-r2.sh --iso "${{ steps.release.outputs.iso }}" --channel production
       - name: Publish immutable release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          iso_name="$(basename "${{ steps.release.outputs.iso }}")"
           gh release create "$GITHUB_REF_NAME" \
-            "${{ steps.release.outputs.iso }}".part* \
             "${{ steps.release.outputs.checksum }}" \
             dist/build-info.json \
             --verify-tag --generate-notes --title "Gladys Assistant Installer $GITHUB_REF_NAME" \
-            --notes "$(printf 'The installer image is published as numbered parts because GitHub caps release assets at 2 GiB. Download every %s.part* file plus the .sha256, then reassemble and verify:\n\n```bash\ncat %s.part* > %s\nsha256sum -c %s.sha256\n```\n\nOn Windows PowerShell:\n\n```powershell\ncmd /c copy /b "%s.part1"+"%s.part2" "%s"\n```\n' "$iso_name" "$iso_name" "$iso_name" "$iso_name" "$iso_name" "$iso_name" "$iso_name")"
+            --notes "$(printf 'Download the installer image from https://download.gladysassistant.com/gladys-assistant-installer-amd64.iso and verify it:\n\n```bash\ncurl -fLO https://download.gladysassistant.com/gladys-assistant-installer-amd64.iso.sha256\nsha256sum -c gladys-assistant-installer-amd64.iso.sha256\n```\n\nThe download link always serves the latest release. The `.sha256` attached here covers the same image under its versioned name.\n')"

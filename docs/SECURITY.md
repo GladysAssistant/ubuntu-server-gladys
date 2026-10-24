@@ -38,7 +38,7 @@ Production scanning rejects test-mode fixtures, Docker and containerd storage, i
 
 ### Release workflow
 
-GitHub Actions defaults to `contents: read`. External actions are pinned to immutable full commit SHAs and Dependabot maintains those pins. Only the final publishing job receives `contents: write`, `id-token: write`, and `attestations: write`, and only after every quality, build, inspection, real Gladys, and recovery dependency has succeeded.
+GitHub Actions defaults to `contents: read`. External actions are pinned to immutable full commit SHAs and Dependabot maintains those pins. Only the final publishing job receives `contents: write`, `id-token: write`, and `attestations: write`, and only after every quality, build, inspection, real Gladys, and recovery dependency has succeeded. The Cloudflare R2 credentials are exposed only to the upload steps of the release and test image publishing jobs, which run after the same gates.
 
 ## Installed system controls
 

@@ -82,12 +82,13 @@ The scheduled and release jobs additionally install the `ci-real` profile, wait 
 
 ## Continuous integration
 
-Three workflows run in GitHub Actions:
+Four workflows run in GitHub Actions:
 
 | Workflow | Trigger | Jobs |
 | --- | --- | --- |
 | `ci.yml` | Push and pull request, except documentation-only changes (`*.md`, `docs/`) | lint, unit tests, config validation, authenticated builds, finished ISO inspection, QEMU install, QEMU first boot |
 | `nightly.yml` | Weekly schedule | Full ecosystem integration against current Canonical metadata and the live Gladys channel |
 | `release.yml` | `vX.Y.Z` tag push | Quality gates, build and inspection, real Gladys first boot, network recovery, power loss recovery, then publish |
+| `test-image.yml` | `vX.Y.Z-suffix` tag push | Quality gates, build and inspection, real Gladys first boot, then upload of the test image |
 
 A successful weekly run never publishes media automatically; publishing is an explicit tag operation described in [RELEASE.md](RELEASE.md).
