@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import re
 import unittest
 from pathlib import Path
@@ -76,8 +77,36 @@ class ComposeConfigurationTests(unittest.TestCase):
         self.assertEqual(gladys["network_mode"], "host")
         self.assertEqual(gladys["cgroup"], "host")
         self.assertIn("/var/lib/gladysassistant:/var/lib/gladysassistant", gladys["volumes"])
-        self.assertEqual(compose["services"]["watchtower"]["image"], "nickfedor/watchtower")
         self.assertIsNone(re.search(r"gladysassistant/gladys:v5\.\d", text))
+
+    def test_watchtower_updates_only_gladys_and_itself(self) -> None:
+        compose = yaml.safe_load(
+            (ROOT / "payload" / "opt" / "gladys" / "compose.yaml").read_text(encoding="utf-8")
+        )
+        watchtower = compose["services"]["watchtower"]
+
+        # A moving tag keeps Watchtower compatible with Docker API changes.
+        self.assertEqual(watchtower["image"], "nickfedor/watchtower")
+        self.assertIn("--label-enable", watchtower["command"])
+        for name, service in compose["services"].items():
+            with self.subTest(service=name):
+                self.assertEqual(
+                    service["labels"], {"com.centurylinklabs.watchtower.enable": "true"}
+                )
+
+    def test_container_logs_are_rotated(self) -> None:
+        compose = yaml.safe_load(
+            (ROOT / "payload" / "opt" / "gladys" / "compose.yaml").read_text(encoding="utf-8")
+        )
+        for name, service in compose["services"].items():
+            with self.subTest(service=name):
+                self.assertEqual(service["logging"]["driver"], "json-file")
+                self.assertEqual(service["logging"]["options"]["max-size"], "10m")
+        daemon = json.loads(
+            (ROOT / "payload" / "etc" / "docker" / "daemon.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(daemon["log-driver"], "json-file")
+        self.assertEqual(daemon["log-opts"], {"max-size": "10m", "max-file": "3"})
 
 
 if __name__ == "__main__":

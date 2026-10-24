@@ -50,6 +50,7 @@ GitHub Actions defaults to `contents: read`. External actions are pinned to immu
 - Atomic, synced state and completion writes plus an exclusive bootstrap lock prevent corruption and duplicate work after power loss.
 - Package recovery retries a complete `dpkg --configure -a`, `apt-get -f install`, `dpkg --configure -a` cycle. A CI-only package blocks inside `postinst` for the forced power loss test; it is generated only in the temporary `ci-smoke` overlay, and production inspection rejects Debian archives outright.
 - Unattended upgrades are restricted to security updates. Automatic reboot and distribution upgrades are disabled.
+- Watchtower only updates containers explicitly labelled for it, which in the Compose contract are Gladys and Watchtower itself. Docker logs are size-capped for every container.
 - `gladys-diagnostics` uses an allowlist of safe commands and never dumps the Gladys database, container inspection output, environment variables, tokens, or passwords.
 
 ## Secure Boot
