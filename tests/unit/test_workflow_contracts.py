@@ -37,6 +37,14 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("ubuntu-26.04-amd64-${{ steps.ubuntu.outputs.sha256 }}", text)
         self.assertIn("cancel-in-progress: true", text)
 
+    def test_ci_skips_documentation_only_changes(self) -> None:
+        workflow = yaml.safe_load((WORKFLOWS / "ci.yml").read_text(encoding="utf-8"))
+        triggers = workflow[True]
+        for event in ("pull_request", "push"):
+            with self.subTest(event=event):
+                self.assertEqual(triggers[event]["paths-ignore"], ["**.md", "docs/**"])
+        self.assertIn("workflow_dispatch", triggers)
+
     def test_media_jobs_install_the_grub_syntax_checker(self) -> None:
         expected_jobs = {
             "ci.yml": ("build-iso", "inspect-iso"),
