@@ -51,6 +51,10 @@ def _safety_checks(config: dict) -> None:
         raise ConfigurationError("production must not embed a known identity")
     if config.get("ssh") != {"install-server": True}:
         raise ConfigurationError("the SSH screen default must install the server")
+    if config.get("drivers") != {"install": False}:
+        raise ConfigurationError(
+            "third-party drivers must stay uninstalled: the ISO ships without them"
+        )
     user_data = config.get("user-data", {})
     if user_data.get("users") != [] or user_data.get("disable_root") is not True:
         raise ConfigurationError("production must contain no ordinary user and must lock root")

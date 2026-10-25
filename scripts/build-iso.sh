@@ -108,9 +108,12 @@ xorriso -osirrox on -indev "$base_iso" \
 	-extract /md5sum.txt "$temporary/md5sum.txt"
 python3 "$SCRIPT_DIR/patch-grub.py" "$temporary/grub.cfg" "$temporary/grub.patched.cfg"
 grub_md5="$(md5sum "$temporary/grub.patched.cfg" | awk '{print $1}')"
+# The restricted pool only carries NVIDIA drivers, which Autoinstall never
+# installs on the target (drivers: install: false). Its signed index stays.
 python3 "$SCRIPT_DIR/update-md5.py" \
 	"$temporary/md5sum.txt" "$temporary/md5sum.patched.txt" \
-	--path boot/grub/grub.cfg --checksum "$grub_md5"
+	--path boot/grub/grub.cfg --checksum "$grub_md5" \
+	--drop-prefix pool/restricted/
 
 payload_sha256="$(awk '{print $1}' "$payload_dir/gladys-payload.tar.sha256")"
 autoinstall_sha256="$(sha256sum "$autoinstall" | awk '{print $1}')"
@@ -119,6 +122,7 @@ printf '{"autoinstall_sha256":"%s","payload_sha256":"%s","profile":"%s","schema"
 
 output_temporary="$temporary/$output_name"
 xorriso -indev "$base_iso" -outdev "$output_temporary" \
+	-rm_r /pool/restricted -- \
 	-mkdir /gladys -- \
 	-map "$autoinstall" /autoinstall.yaml \
 	-map "$payload_dir/gladys-payload.tar" /gladys/gladys-payload.tar \

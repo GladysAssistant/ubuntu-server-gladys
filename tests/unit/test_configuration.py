@@ -33,6 +33,8 @@ class AutoinstallConfigurationTests(unittest.TestCase):
         self.assertEqual(config["source"]["id"], "ubuntu-server-minimal")
         self.assertEqual(config["storage"]["layout"]["name"], "direct")
         self.assertEqual(config["ssh"], {"install-server": True})
+        # The restricted driver pool is pruned from the ISO.
+        self.assertEqual(config["drivers"], {"install": False})
         self.assertNotIn("identity", config)
         # Subiquity appends list values, so the identity screen account survives.
         self.assertEqual(config["user-data"]["users"], [])
