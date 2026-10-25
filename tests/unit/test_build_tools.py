@@ -403,6 +403,28 @@ class MediaChecksumTests(unittest.TestCase):
             "22222222222222222222222222222222  ./casper/initrd\n",
         )
 
+    def test_drops_only_entries_below_a_pruned_directory(self) -> None:
+        original = (
+            "11111111111111111111111111111111  ./pool/restricted/n/nvidia.deb\n"
+            "22222222222222222222222222222222  ./pool/main/l/linux.deb\n"
+            "33333333333333333333333333333333  ./pool/restricted-extra.deb\n"
+            "44444444444444444444444444444444  ./dists/resolute/restricted/binary-amd64/Packages\n"
+        )
+
+        updated = update_md5.drop_entries(original, "pool/restricted/")
+
+        self.assertEqual(
+            updated,
+            "22222222222222222222222222222222  ./pool/main/l/linux.deb\n"
+            "33333333333333333333333333333333  ./pool/restricted-extra.deb\n"
+            "44444444444444444444444444444444  ./dists/resolute/restricted/binary-amd64/Packages\n",
+        )
+
+    def test_rejects_a_pruned_prefix_that_is_not_a_directory(self) -> None:
+        for prefix in ("pool/restricted", "/", "./"):
+            with self.assertRaises(update_md5.MediaChecksumError):
+                update_md5.drop_entries("", prefix)
+
     def test_rejects_duplicate_checksum_entries(self) -> None:
         duplicate = (
             "11111111111111111111111111111111  boot/grub/grub.cfg\n"
@@ -1380,6 +1402,12 @@ class BuildContractTests(unittest.TestCase):
 
                     output_index = arguments.index("-outdev") + 1
                     output_iso = Path(arguments[output_index])
+                    rm_index = arguments.index("-rm_r")
+                    if arguments[rm_index + 1 : rm_index + 3] != [
+                        "/pool/restricted",
+                        "--",
+                    ]:
+                        raise SystemExit("xorriso must prune only the restricted pool")
                     mkdir_index = arguments.index("-mkdir")
                     if arguments[mkdir_index + 1 : mkdir_index + 3] != [
                         "/gladys",
@@ -1441,6 +1469,8 @@ class BuildContractTests(unittest.TestCase):
         self.assertIn('PROFILE="production"', script)
         self.assertIn("production | ci-smoke | ci-real", script)
         self.assertIn("-boot_image any replay", script)
+        self.assertIn("-rm_r /pool/restricted --", script)
+        self.assertIn("--drop-prefix pool/restricted/", script)
         self.assertIn("/autoinstall.yaml", script)
         self.assertIn("inspect-iso.sh", script)
 

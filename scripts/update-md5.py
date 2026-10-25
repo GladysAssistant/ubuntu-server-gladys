@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Update one existing Ubuntu media checksum without disabling the list."""
+"""Update Ubuntu media checksums without disabling the list.
+
+One modified file gets its checksum replaced, and entries for directories
+pruned from the image are dropped so the media check stays meaningful.
+"""
 
 from __future__ import annotations
 
@@ -34,16 +38,35 @@ def update_checksum(document: str, target: str, checksum: str) -> str:
     return "".join(output)
 
 
+def drop_entries(document: str, prefix: str) -> str:
+    normalized_prefix = prefix.removeprefix("./")
+    if not normalized_prefix.endswith("/") or normalized_prefix == "/":
+        raise MediaChecksumError("pruned prefix must name a directory ending in /")
+    output: list[str] = []
+    for line in document.splitlines(keepends=True):
+        content = line.rstrip("\n")
+        match = LINE.fullmatch(content)
+        if match is not None and match.group(4).removeprefix("./").startswith(
+            normalized_prefix
+        ):
+            continue
+        output.append(line)
+    return "".join(output)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--path", required=True)
     parser.add_argument("--checksum", required=True)
+    parser.add_argument("--drop-prefix", action="append", default=[])
     args = parser.parse_args()
     updated = update_checksum(
         args.input.read_text(encoding="utf-8"), args.path, args.checksum
     )
+    for prefix in args.drop_prefix:
+        updated = drop_entries(updated, prefix)
     args.output.write_text(updated, encoding="utf-8", newline="\n")
     return 0
 

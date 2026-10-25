@@ -50,7 +50,7 @@ bash scripts/inspect-iso.sh --iso dist/gladys-assistant-installer-vX.Y.Z-amd64.i
   --base-iso "$base" --profile production
 ```
 
-Inspection re-extracts the image, verifies the embedded payload hashes and build profile, checks the GRUB structure and repaired media checksum, compares the signed boot chain and El Torito metadata against the base ISO, and rejects production payload contamination such as test fixtures or container image archives.
+Inspection re-extracts the image, verifies the embedded payload hashes and build profile, checks the GRUB structure and repaired media checksum, confirms the restricted driver pool is gone while its signed index remains and that every `md5sum.txt` entry exists in the image, compares the signed boot chain and El Torito metadata against the base ISO, and rejects production payload contamination such as test fixtures or container image archives.
 
 ## Static and unit tests
 

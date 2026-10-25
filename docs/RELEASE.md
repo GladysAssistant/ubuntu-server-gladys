@@ -30,7 +30,7 @@ Only the publishing job receives write permissions; everything else runs with re
 
 ## Published artifacts
 
-GitHub caps release assets at 2 GiB per file, which is below the size of the installer image, so the ISO itself is published on Cloudflare R2 (bucket `gladys-assistant-os-images`, served at `download.gladysassistant.com`). Each channel has one fixed object that every publication overwrites, so the bucket never keeps old images:
+GitHub caps release assets at 2 GiB per file, which leaves too little headroom for the installer image (about 1.8 GiB), so the ISO itself is published on Cloudflare R2 (bucket `gladys-assistant-os-images`, served at `download.gladysassistant.com`). Each channel has one fixed object that every publication overwrites, so the bucket never keeps old images:
 
 | Channel | Trigger | Image | Checksum |
 | --- | --- | --- | --- |

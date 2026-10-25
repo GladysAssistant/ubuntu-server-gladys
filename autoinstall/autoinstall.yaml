@@ -19,6 +19,8 @@ autoinstall:
     install-server: true
   kernel-crash-dumps:
     enabled: false
+  drivers:
+    install: false
   apt:
     fallback: offline-install
   updates: security

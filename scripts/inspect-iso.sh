@@ -117,6 +117,31 @@ if ((${#grub_md5_entries[@]} == 1)); then
 	}
 fi
 
+xorriso -indev "$ISO" -find / -type f 2>/dev/null >"$temporary/custom-files.txt"
+python3 - "$temporary/custom/md5sum.txt" "$temporary/custom-files.txt" <<'PY'
+import sys
+
+md5sum_path, files_path = sys.argv[1:]
+with open(files_path, encoding="utf-8") as handle:
+    files = {line.strip().strip("'").lstrip("/") for line in handle if line.strip()}
+if any(path.startswith("pool/restricted/") for path in files):
+    raise SystemExit("finished ISO still carries the restricted driver pool")
+if not any(
+    path.startswith("dists/") and path.endswith("/restricted/binary-amd64/Packages")
+    for path in files
+):
+    raise SystemExit("finished ISO lost the signed restricted package index")
+with open(md5sum_path, encoding="utf-8") as handle:
+    listed = [
+        line.split(maxsplit=1)[1].strip().lstrip("*").removeprefix("./")
+        for line in handle
+        if line.strip()
+    ]
+missing = sorted(path for path in listed if path not in files)
+if missing:
+    raise SystemExit(f"md5sum.txt lists files absent from the ISO: {missing[:5]}")
+PY
+
 python3 - "$temporary/custom/autoinstall.yaml" \
 	"$temporary/custom/gladys/build-profile.json" "$PROFILE" \
 	"$temporary/custom/gladys/gladys-payload.tar" <<'PY'
