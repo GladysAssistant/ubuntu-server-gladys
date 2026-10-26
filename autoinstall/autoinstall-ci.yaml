@@ -37,6 +37,9 @@ autoinstall:
     - [sh, -c, "chown -R 0:0 /target/usr/lib/gladys-installer /target/usr/share/gladys-installer /target/opt/gladys /target/etc/gladys-installer /target/var/lib/gladys-installer"]
     - [sh, -c, "chmod 0755 /target/usr/lib/gladys-installer/*.py /target/usr/local/sbin/gladys-diagnostics"]
     - [sh, -c, "chmod 0644 /target/etc/systemd/system/gladys-*.service /target/opt/gladys/compose.yaml"]
+    # Ubuntu Server keeps the C.UTF-8 system locale, so record the language
+    # chosen in the installer for the setup page and the tty1 console.
+    - [sh, -c, "sed -n 's/^  locale: //p' /var/log/installer/autoinstall-user-data | head -n 1 > /target/etc/gladys-installer/language; chmod 0644 /target/etc/gladys-installer/language"]
     - systemctl --root=/target enable gladys-setup-web.service
     - systemctl --root=/target enable gladys-firstboot.service
     - systemctl --root=/target enable gladys-console.service

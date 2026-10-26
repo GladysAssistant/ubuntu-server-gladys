@@ -415,6 +415,17 @@ PY
 	rm -f -- "$temporary"
 }
 
+# The setup page and tty1 follow the language recorded by the late-commands,
+# since Ubuntu Server keeps the C.UTF-8 system locale.
+assert_installer_language() {
+	local disk="$1" language
+	language="$(virt-cat -a "$disk" /etc/gladys-installer/language)"
+	[[ "$language" == "fr_FR.UTF-8" ]] || {
+		printf 'Installer language not recorded: %s\n' "$language" >&2
+		return 1
+	}
+}
+
 assert_dpkg_barrier_state() {
 	local disk="$1" expected="$2" temporary update_name
 	[[ "$expected" == "interrupted" || "$expected" == "installed" ]] || return 64
