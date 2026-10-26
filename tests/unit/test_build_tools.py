@@ -1638,7 +1638,7 @@ class CiBarrierPackageTests(unittest.TestCase):
 )
 class PublishR2Tests(unittest.TestCase):
     def _publish(
-        self, channel: str, token_scope: str = "accounts/account"
+        self, channel: str, token_scope: str = "accounts/account", actions: bool = False
     ) -> tuple[subprocess.CompletedProcess, list[str], str, str]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1672,8 +1672,12 @@ class PublishR2Tests(unittest.TestCase):
             log = root / "aws.log"
             curl_log = root / "curl.log"
             environment = {
-                key: value for key, value in os.environ.items() if not key.startswith("AWS_")
+                key: value
+                for key, value in os.environ.items()
+                if not key.startswith("AWS_") and key != "GITHUB_ACTIONS"
             }
+            if actions:
+                environment["GITHUB_ACTIONS"] = "true"
             result = subprocess.run(
                 ["bash", bash_path(SCRIPTS / "publish-r2.sh"), "--iso", str(iso), "--channel", channel],
                 env={
@@ -1727,6 +1731,14 @@ class PublishR2Tests(unittest.TestCase):
                     self.assertTrue(call.startswith(f"token-id {secret} s3 cp "), call)
                 self.assertIn("-H @-", curl_calls)
                 self.assertNotIn("token ", curl_calls.replace("tokens/", ""))
+
+    def test_masks_the_derived_secret_in_github_actions(self) -> None:
+        result, _, _, _ = self._publish("test", actions=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(
+            result.stdout.splitlines()[0],
+            f"::add-mask::{hashlib.sha256(b'token').hexdigest()}",
+        )
 
     def test_rejects_an_unverified_token_before_uploading(self) -> None:
         result, calls, _, _ = self._publish("test", "none")
