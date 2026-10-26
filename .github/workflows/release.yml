@@ -185,8 +185,7 @@ jobs:
       - name: Upload the ISO to the production R2 path
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_STORAGE_TOKEN: ${{ secrets.R2_STORAGE_TOKEN }}
         run: bash scripts/publish-r2.sh --iso "${{ steps.release.outputs.iso }}" --channel production
       - name: Publish immutable release assets
         env:

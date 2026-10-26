@@ -48,7 +48,7 @@ build-info.json
 
 `build-info.json` records the installer version, the full Git commit, the architecture, the Ubuntu series, the selected Ubuntu ISO filename and SHA256, and the UTC build timestamp. It contains no Gladys version. The publish job checks the `.sha256`, creates GitHub artifact provenance for the image, uploads it to R2, and uses `gh release create --verify-tag`.
 
-The workflows need three repository secrets: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` (S3-compatible credentials of an R2 API token with write access to the bucket).
+The workflows need two repository secrets: `R2_ACCOUNT_ID`, the Cloudflare account ID, and `R2_STORAGE_TOKEN`, the value of an R2 API token with write access to the bucket. `scripts/publish-r2.sh` derives the S3 credentials from the token as Cloudflare documents: the token id, obtained from the token verification endpoint, is the access key ID, and the SHA-256 of the token value is the secret access key.
 
 ## Verifying a release as a user
 
