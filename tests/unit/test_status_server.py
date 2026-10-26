@@ -75,6 +75,28 @@ class StatusServerTests(unittest.TestCase):
         self.assertNotIn("https://", body)
         self.assertNotIn("http://", body)
 
+    def test_root_follows_the_locale_cloud_init_applies_after_startup(self) -> None:
+        locale_path = Path(self.temporary.name) / "locale"
+        locale_path.write_text('LANG="C.UTF-8"\n', encoding="utf-8")
+        server = status_server.make_server(
+            "127.0.0.1", 0, self.state, WEB_ROOT, locale_path=locale_path
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}/"
+        try:
+            with urllib.request.urlopen(base, timeout=2) as response:
+                self.assertIn('<html lang="en"', response.read().decode("utf-8"))
+            locale_path.write_text('LANG="fr_FR.UTF-8"\n', encoding="utf-8")
+            with urllib.request.urlopen(base, timeout=2) as response:
+                body = response.read().decode("utf-8")
+            self.assertIn('<html lang="fr"', body)
+            self.assertIn("Préparation de votre maison connectée", body)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
     def test_real_page_marks_right_to_left_languages(self) -> None:
         locale_path = Path(self.temporary.name) / "locale"
         locale_path.write_text("LANG=ar_EG.UTF-8\n", encoding="utf-8")

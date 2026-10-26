@@ -215,9 +215,11 @@ def service_states(addresses: list[str]) -> dict[str, bool]:
 
 
 def main() -> int:
-    language = i18n.read_installed_language()
     frame = 0
     while True:
+        # cloud-init applies the installer language during first boot, after
+        # this console starts: follow it instead of reading it once.
+        language = i18n.read_installed_language()
         state = read_state()
         addresses = common.current_ipv4_addresses()
         screen = render_screen(

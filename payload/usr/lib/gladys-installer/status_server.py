@@ -98,9 +98,9 @@ def render_index(
     return rendered.encode("utf-8")
 
 
-def handler_factory(state_path: Path, web_root: Path) -> type[BaseHTTPRequestHandler]:
-    index_body = render_index(web_root)
-
+def handler_factory(
+    state_path: Path, web_root: Path, locale_path: Path = i18n.DEFAULT_LOCALE_PATH
+) -> type[BaseHTTPRequestHandler]:
     class StatusHandler(BaseHTTPRequestHandler):
         server_version = "GladysSetup/1"
         sys_version = ""
@@ -123,7 +123,10 @@ def handler_factory(state_path: Path, web_root: Path) -> type[BaseHTTPRequestHan
 
         def do_GET(self) -> None:  # noqa: N802
             if self.path == "/":
-                self._send(HTTPStatus.OK, index_body, "text/html; charset=utf-8")
+                # cloud-init applies the installer language during first boot,
+                # after this server starts: render with the current locale.
+                body = render_index(web_root, locale_path=locale_path)
+                self._send(HTTPStatus.OK, body, "text/html; charset=utf-8")
                 return
             if self.path == "/status.json":
                 body = json.dumps(safe_state(state_path), ensure_ascii=False).encode("utf-8") + b"\n"
@@ -176,10 +179,11 @@ def make_server(
     web_root: Path,
     *,
     request_timeout: float = 5.0,
+    locale_path: Path = i18n.DEFAULT_LOCALE_PATH,
 ) -> StatusHttpServer:
     return StatusHttpServer(
         (host, port),
-        handler_factory(state_path, web_root),
+        handler_factory(state_path, web_root, locale_path),
         request_timeout=request_timeout,
     )
 

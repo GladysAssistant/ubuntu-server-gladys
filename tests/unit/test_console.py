@@ -14,6 +14,28 @@ import console  # noqa: E402
 
 
 class ConsoleRenderingTests(unittest.TestCase):
+    def test_console_follows_the_locale_cloud_init_applies_after_startup(self) -> None:
+        frames: list[str] = []
+        languages = iter(["en", "fr"])
+
+        def capture(_state, _addresses, _services, *, language, frame):
+            frames.append(language)
+            return ""
+
+        with (
+            mock.patch.object(console.i18n, "read_installed_language", side_effect=lambda: next(languages)),
+            mock.patch.object(console, "read_state", return_value={"phase": "PULL_GLADYS"}),
+            mock.patch.object(console.common, "current_ipv4_addresses", return_value=[]),
+            mock.patch.object(console, "service_states", return_value={}),
+            mock.patch.object(console, "render_screen", side_effect=capture),
+            mock.patch.object(console.sys, "stdout"),
+            mock.patch.object(console.time, "sleep", side_effect=[None, StopIteration]),
+        ):
+            with self.assertRaises(StopIteration):
+                console.main()
+
+        self.assertEqual(frames, ["en", "fr"])
+
     def test_wait_network_screen_recommends_ethernet(self) -> None:
         screen = console.render_screen(
             {"phase": "WAIT_NETWORK", "progress": 5, "message": "Waiting"},
