@@ -1637,7 +1637,9 @@ class CiBarrierPackageTests(unittest.TestCase):
     "requires a POSIX shell with sha256sum",
 )
 class PublishR2Tests(unittest.TestCase):
-    def _publish(self, channel: str) -> tuple[subprocess.CompletedProcess, list[str], str]:
+    def _publish(
+        self, channel: str, token_scope: str = "accounts/account", actions: bool = False
+    ) -> tuple[subprocess.CompletedProcess, list[str], str, str]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             fake_bin = root / "bin"
@@ -1645,25 +1647,47 @@ class PublishR2Tests(unittest.TestCase):
             aws = fake_bin / "aws"
             aws.write_text(
                 '#!/usr/bin/env bash\n'
-                'printf "%s\\n" "$*" >>"$AWS_LOG"\n'
+                'printf "%s %s %s\\n" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" "$*" >>"$AWS_LOG"\n'
                 'if [[ "$3" == *.sha256 ]]; then cp -- "$3" "$AWS_LOG.sha256"; fi\n',
                 encoding="utf-8",
             )
             aws.chmod(0o755)
+            curl = fake_bin / "curl"
+            curl.write_text(
+                '#!/usr/bin/env bash\n'
+                'printf "%s\\n" "$*" >>"$CURL_LOG"\n'
+                '[[ "$(cat)" == "Authorization: Bearer token" ]] || exit 22\n'
+                'case "${!#}" in\n'
+                '"https://api.cloudflare.com/client/v4/$TOKEN_SCOPE/tokens/verify")\n'
+                '\tprintf \'{"success":true,"result":{"id":"token-id","status":"active"}}\' ;;\n'
+                '*) exit 22 ;;\n'
+                'esac\n',
+                encoding="utf-8",
+            )
+            curl.chmod(0o755)
             iso = root / "gladys-assistant-installer-v1.2.3-amd64.iso"
             iso.write_bytes(b"iso")
             digest = hashlib.sha256(b"iso").hexdigest()
             (root / f"{iso.name}.sha256").write_text(f"{digest}  {iso.name}\n", encoding="utf-8")
             log = root / "aws.log"
+            curl_log = root / "curl.log"
+            environment = {
+                key: value
+                for key, value in os.environ.items()
+                if not key.startswith("AWS_") and key != "GITHUB_ACTIONS"
+            }
+            if actions:
+                environment["GITHUB_ACTIONS"] = "true"
             result = subprocess.run(
                 ["bash", bash_path(SCRIPTS / "publish-r2.sh"), "--iso", str(iso), "--channel", channel],
                 env={
-                    **os.environ,
+                    **environment,
                     "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
                     "AWS_LOG": str(log),
+                    "CURL_LOG": str(curl_log),
+                    "TOKEN_SCOPE": token_scope,
                     "R2_ACCOUNT_ID": "account",
-                    "AWS_ACCESS_KEY_ID": "key",
-                    "AWS_SECRET_ACCESS_KEY": "secret",
+                    "R2_STORAGE_TOKEN": "token",
                 },
                 capture_output=True,
                 text=True,
@@ -1675,12 +1699,13 @@ class PublishR2Tests(unittest.TestCase):
                 if (root / "aws.log.sha256").exists()
                 else ""
             )
-            return result, calls, f"{digest}|{checksum}"
+            curl_calls = curl_log.read_text(encoding="utf-8") if curl_log.exists() else ""
+            return result, calls, f"{digest}|{checksum}", curl_calls
 
     def test_channels_overwrite_one_fixed_object_each(self) -> None:
         for channel, prefix in (("production", ""), ("test", "test/")):
             with self.subTest(channel=channel):
-                result, calls, digests = self._publish(channel)
+                result, calls, digests, _ = self._publish(channel)
                 self.assertEqual(0, result.returncode, result.stderr)
                 target = f"s3://gladys-assistant-os-images/{prefix}gladys-assistant-installer-amd64.iso"
                 self.assertEqual(len(calls), 2)
@@ -1696,8 +1721,33 @@ class PublishR2Tests(unittest.TestCase):
                     f"https://download.gladysassistant.com/{prefix}gladys-assistant-installer-amd64.iso",
                 )
 
+    def test_derives_s3_credentials_from_the_api_token(self) -> None:
+        secret = hashlib.sha256(b"token").hexdigest()
+        for scope in ("accounts/account", "user"):
+            with self.subTest(scope=scope):
+                result, calls, _, curl_calls = self._publish("test", scope)
+                self.assertEqual(0, result.returncode, result.stderr)
+                for call in calls:
+                    self.assertTrue(call.startswith(f"token-id {secret} s3 cp "), call)
+                self.assertIn("-H @-", curl_calls)
+                self.assertNotIn("token ", curl_calls.replace("tokens/", ""))
+
+    def test_masks_the_derived_secret_in_github_actions(self) -> None:
+        result, _, _, _ = self._publish("test", actions=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(
+            result.stdout.splitlines()[0],
+            f"::add-mask::{hashlib.sha256(b'token').hexdigest()}",
+        )
+
+    def test_rejects_an_unverified_token_before_uploading(self) -> None:
+        result, calls, _, _ = self._publish("test", "none")
+        self.assertEqual(result.returncode, 77)
+        self.assertIn("R2_STORAGE_TOKEN", result.stderr)
+        self.assertEqual(calls, [])
+
     def test_rejects_unknown_channel(self) -> None:
-        result, calls, _ = self._publish("nightly")
+        result, calls, _, _ = self._publish("nightly")
         self.assertEqual(result.returncode, 64)
         self.assertEqual(calls, [])
 
