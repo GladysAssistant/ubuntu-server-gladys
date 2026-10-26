@@ -2,7 +2,7 @@
 """Small, dependency-free translation catalogue for the first-boot interface.
 
 The installer runs before optional Python packages are present, so this module
-deliberately keeps its catalogue in Python and treats /etc/default/locale as
+deliberately keeps its catalogue in Python and treats the language files as
 data, never as a shell fragment.
 """
 
@@ -27,6 +27,9 @@ _UNRENDERABLE_CONSOLE_LANGUAGES = frozenset(
     {"ar", "bo", "he", "ja", "zh_CN", "zh_TW"}
 )
 DEFAULT_LOCALE_PATH = Path("/etc/default/locale")
+# Written by the Autoinstall late-commands: Ubuntu Server keeps the C.UTF-8
+# system locale whatever language was chosen in the installer.
+DEFAULT_SELECTION_PATH = Path("/etc/gladys-installer/language")
 _LOCALE_RE = re.compile(
     r"^(?P<language>[A-Za-z]{2,3})(?:_(?P<territory>[A-Za-z]{2}))?"
     r"(?:\.[A-Za-z0-9_-]+)?(?:@[A-Za-z0-9_-]+)?$"
@@ -161,8 +164,16 @@ def _normalize(language: object) -> str:
     return base if base in _LANGUAGE_SET else "en"
 
 
-def read_installed_language(path: Path = DEFAULT_LOCALE_PATH) -> str:
-    """Read the single LANG assignment in *path* without sourcing the file."""
+def read_installed_language(
+    path: Path = DEFAULT_LOCALE_PATH, *, selection_path: Path = DEFAULT_SELECTION_PATH
+) -> str:
+    """Prefer the installer selection, else the single LANG assignment in *path*."""
+    try:
+        selected = Path(selection_path).read_text(encoding="utf-8").strip().strip("'\"")
+    except (OSError, UnicodeError):
+        selected = ""
+    if selected:
+        return _normalize(selected)
     try:
         lines = Path(path).read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeError):

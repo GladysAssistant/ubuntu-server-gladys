@@ -65,6 +65,7 @@ class AutoinstallConfigurationTests(unittest.TestCase):
         verify_at = rendered.index("sha256sum -c gladys-payload.tar.sha256")
         extract_at = rendered.index("tar --extract")
         self.assertLess(verify_at, extract_at)
+        self.assertLess(extract_at, rendered.index("> /target/etc/gladys-installer/language"))
         self.assertNotIn("daemon-reload", rendered)
         self.assertIn("systemctl --root=/target enable gladys-firstboot.service", rendered)
         self.assertIn("systemctl --root=/target mask getty@tty1.service", rendered)

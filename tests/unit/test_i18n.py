@@ -43,6 +43,36 @@ class InstallerLocalizationTests(unittest.TestCase):
                     locale_path.write_text(value, encoding="utf-8")
                     self.assertEqual(i18n.read_installed_language(locale_path), "en")
 
+    def test_installer_selection_wins_over_the_c_system_locale(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            locale_path = Path(directory) / "locale"
+            locale_path.write_text("LANG=C.UTF-8\n", encoding="utf-8")
+            selection_path = Path(directory) / "language"
+            for value, expected in (
+                ("fr_FR.UTF-8\n", "fr"),
+                ("'de_DE.UTF-8'\n", "de"),
+                ("$(touch /tmp/no)\n", "en"),
+            ):
+                with self.subTest(value=value):
+                    selection_path.write_text(value, encoding="utf-8")
+                    self.assertEqual(
+                        i18n.read_installed_language(locale_path, selection_path=selection_path),
+                        expected,
+                    )
+
+    def test_empty_or_missing_selection_falls_back_to_the_system_locale(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            locale_path = Path(directory) / "locale"
+            locale_path.write_text("LANG=fr_FR.UTF-8\n", encoding="utf-8")
+            selection_path = Path(directory) / "language"
+            self.assertEqual(
+                i18n.read_installed_language(locale_path, selection_path=selection_path), "fr"
+            )
+            selection_path.write_text("\n", encoding="utf-8")
+            self.assertEqual(
+                i18n.read_installed_language(locale_path, selection_path=selection_path), "fr"
+            )
+
     def test_every_subiquity_language_has_complete_interface_text(self) -> None:
         expected_languages = {
             "ar",
