@@ -489,6 +489,8 @@ if not shadow.get("gladys-ci", "").startswith("$6$"):
     raise SystemExit("operator account has no usable password")
 if "gladys-ci" not in groups.get("sudo", []):
     raise SystemExit("operator account is not an administrator")
+if "gladys-ci" not in groups.get("docker", []):
+    raise SystemExit("operator account cannot use Docker without sudo")
 if not shadow.get("root", "").startswith(("!", "*")):
     raise SystemExit("root is not locked")
 if (root / "hostname").read_text(encoding="utf-8").strip() != "gladys":

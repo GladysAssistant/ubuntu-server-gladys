@@ -7,6 +7,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 
 RUNTIME = Path(__file__).resolve().parents[2] / "payload" / "usr" / "lib" / "gladys-installer"
@@ -63,6 +65,7 @@ class BootstrapTests(unittest.TestCase):
             http_checker=lambda *_args, **_kwargs: True,
             port_checker=lambda: True,
             machine=lambda: "x86_64",
+            administrators=lambda: ["operator"],
         )
 
     def test_completed_marker_skips_every_operation(self) -> None:
@@ -89,8 +92,10 @@ class BootstrapTests(unittest.TestCase):
             start_watchtower = commands.index(
                 ("docker", "compose", "-f", str(installer.paths.compose), "up", "-d", "watchtower")
             )
+            grant_docker = commands.index(("usermod", "--append", "--groups", "docker", "operator"))
             self.assertLess(stop_web, start_gladys)
             self.assertLess(start_gladys, start_watchtower)
+            self.assertLess(start_watchtower, grant_docker)
             self.assertTrue(installer.paths.completed.is_file())
             state = json.loads(installer.paths.state.read_text(encoding="utf-8"))
             self.assertEqual((state["phase"], state["progress"]), ("READY", 100))
@@ -151,6 +156,36 @@ class BootstrapTests(unittest.TestCase):
                 runner.commands,
                 [("systemctl", "enable", "--now", "docker.service")],
             )
+
+    def test_administrators_join_the_docker_group(self) -> None:
+        for administrators in ([], ["operator"], ["operator", "second"]):
+            with self.subTest(administrators=administrators), tempfile.TemporaryDirectory() as directory:
+                runner = FakeRunner()
+                installer = self.make_installer(directory, runner)
+                installer.administrators = lambda: administrators
+
+                installer.grant_docker_access()
+
+                self.assertEqual(
+                    runner.commands,
+                    [("usermod", "--append", "--groups", "docker", name) for name in administrators],
+                )
+
+    def test_administrator_accounts_are_ordinary_sudo_members(self) -> None:
+        uids = {"operator": 1000, "nobody": 65534, "service": 999, "second": 1001}
+
+        def getpwnam(name: str) -> SimpleNamespace:
+            if name not in uids:
+                raise KeyError(name)
+            return SimpleNamespace(pw_uid=uids[name])
+
+        sudo = SimpleNamespace(gr_mem=["service", "operator", "ghost", "nobody", "second"])
+        with mock.patch.object(bootstrap.grp, "getgrnam", return_value=sudo), mock.patch.object(
+            bootstrap.pwd, "getpwnam", side_effect=getpwnam
+        ):
+            self.assertEqual(bootstrap.administrator_accounts(), ["operator", "second"])
+        with mock.patch.object(bootstrap.grp, "getgrnam", side_effect=KeyError("sudo")):
+            self.assertEqual(bootstrap.administrator_accounts(), [])
 
     def test_final_verification_checks_docker_without_avahi(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -67,6 +67,7 @@ Secure Boot is expected to remain compatible because the Ubuntu signed boot chai
 - [ ] A non-technical tester can identify the destructive disk confirmation.
 - [ ] The identity screen requires creating an account and the SSH screen presents the OpenSSH server selected by default.
 - [ ] The machine is named `gladys` after installation, whatever server name was typed on the identity screen.
+- [ ] After first boot reaches **Ready** and a fresh login, `docker ps` works without `sudo` or a password.
 - [ ] The setup page follows the selected language; exercise French, English, a third Latin language, Chinese, and one right-to-left language.
 - [ ] tty1 follows supported Latin, Greek, and Cyrillic selections and uses readable English for Arabic, Hebrew, Tibetan, Japanese, and Chinese rather than emitting unusable glyphs.
 - [ ] Long package and container downloads keep a visible activity animation without displaying fabricated byte counts.

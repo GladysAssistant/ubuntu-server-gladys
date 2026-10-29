@@ -17,8 +17,10 @@ from typing import Callable, TypeVar
 
 try:
     import fcntl
+    import grp
+    import pwd
 except ImportError:  # pragma: no cover - the installed appliance is Linux-only
-    fcntl = None  # type: ignore[assignment]
+    fcntl = grp = pwd = None  # type: ignore[assignment]
 
 import common
 
@@ -62,6 +64,23 @@ class InstallerPaths:
     ci_barrier_package: Path = Path(
         "/etc/gladys-installer/gladys-ci-dpkg-barrier_1.0_all.deb"
     )
+
+
+def administrator_accounts() -> list[str]:
+    """Return the ordinary accounts in the sudo group, such as the operator's."""
+    try:
+        members = grp.getgrnam("sudo").gr_mem
+    except KeyError:
+        return []
+    accounts = []
+    for member in members:
+        try:
+            uid = pwd.getpwnam(member).pw_uid
+        except KeyError:
+            continue
+        if 1000 <= uid < 65534:
+            accounts.append(member)
+    return accounts
 
 
 def retry_operation(
@@ -111,6 +130,7 @@ class Bootstrap:
         http_checker: Callable[..., bool] = common.http_ready,
         port_checker: Callable[[], bool] | None = None,
         machine: Callable[[], str] = platform.machine,
+        administrators: Callable[[], list[str]] = administrator_accounts,
     ) -> None:
         self.paths = paths
         self.runner = runner
@@ -119,6 +139,7 @@ class Bootstrap:
         self.http_checker = http_checker
         self.port_checker = port_checker or self._port_80_available
         self.machine = machine
+        self.administrators = administrators
         self.test_config: dict[str, object] | None = None
 
     @property
@@ -286,6 +307,14 @@ class Bootstrap:
             ["systemctl", "enable", "--now", "docker.service"], timeout=120
         )
 
+    def grant_docker_access(self) -> None:
+        # Docker group membership is root-equivalent, like the sudo the
+        # administrators already hold; it spares them the password for docker.
+        for account in self.administrators():
+            self._retry_command(
+                ["usermod", "--append", "--groups", "docker", account], timeout=60
+            )
+
     def docker_preflight(self) -> None:
         self._retry_command(["docker", "version"], timeout=60)
         self._retry_command(["docker", "compose", "version"], timeout=60)
@@ -444,6 +473,7 @@ class Bootstrap:
         self.state(common.Phase.START_WATCHTOWER, "Enabling Gladys updates…")
         self.start_watchtower()
         self.state(common.Phase.FINALIZE, "Finishing appliance setup…")
+        self.grant_docker_access()
         retry_operation(self.verify_final, sleep=self.sleep)
         image_id, image_digest = retry_operation(self.image_metadata, sleep=self.sleep)
         self.state(common.Phase.READY, "Gladys Assistant is ready.")

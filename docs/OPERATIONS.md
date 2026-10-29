@@ -60,6 +60,8 @@ sudo gladys-diagnostics
 
 It uses an allowlist of safe commands and never dumps the Gladys database, container inspection output, environment variables, tokens, or passwords, so its output can be shared in a support request.
 
+The account created during installation can run Docker commands such as `docker ps` or `docker compose -f /opt/gladys/compose.yaml logs gladys` without `sudo` or a password: it joins the `docker` group at the end of first boot, so log in again once after the console shows **Ready**.
+
 Detailed logs live in journald:
 
 ```bash
@@ -78,6 +80,7 @@ journalctl -u gladys-console.service
 | Power was cut during provisioning | Just power the machine back on. Every phase is idempotent, package state is repaired automatically, and provisioning continues from where it left off |
 | Console shows `FATAL` | A deterministic configuration problem was found. Run `sudo gladys-diagnostics` and read `journalctl -u gladys-firstboot.service` for the exact cause. The service exits with code 78 and does not retry |
 | Gladys stops answering after months of use | Check `docker compose -f /opt/gladys/compose.yaml ps` and the diagnostics output. Gladys and Watchtower restart automatically on reboot |
+| `docker` asks for `sudo` or reports `permission denied` on the Docker socket | The account joins the `docker` group at the end of first boot. Log out and back in (or reconnect over SSH) once after the console shows **Ready** |
 
 ## Reinstalling
 
