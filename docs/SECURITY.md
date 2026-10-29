@@ -15,7 +15,7 @@ The primary threats this project defends against are:
 
 The project does not defend against a malicious firmware or UEFI implementation, physical access after installation, compromise of Canonical's signing key, compromise of a published container image behind its trusted registry channel, or vulnerabilities inside Ubuntu, Docker, Gladys, or Watchtower.
 
-Gladys intentionally runs privileged, with host networking, device access, the host D-Bus socket, and the Docker socket, because that is part of its hardware integration contract. A Gladys compromise must therefore be treated as a host compromise. This boundary is deliberate and documented rather than mitigated.
+Gladys intentionally runs privileged, with host networking, device access, the host system D-Bus socket (whose `:ro` mount does not restrict calls to host services), and the Docker socket, because that is part of its hardware integration contract. A Gladys compromise must therefore be treated as a host compromise. This boundary is deliberate and documented rather than mitigated.
 
 ## Supply chain
 
@@ -42,7 +42,7 @@ GitHub Actions defaults to `contents: read`. External actions are pinned to immu
 
 ## Installed system controls
 
-- Production never erases a disk before the user confirms Subiquity's destructive-action dialog. It selects the disk automatically only when exactly one internal disk exists (USB, removable, hot-plugged, read-only, virtual, mounted, and small disks never count), and otherwise asks the user to pick it on the storage screen. Only disposable CI media install without any confirmation.
+- Production never erases a disk before the user confirms Subiquity's destructive-action dialog. It selects the disk automatically only when exactly one internal disk exists (USB, virtual, and small disks never count, and a removable, hot-pluggable, read-only, or mounted disk always brings the storage screen back), and otherwise asks the user to pick it on the storage screen. Only disposable CI media install without any confirmation.
 - At the end of first boot, the administrator accounts (ordinary members of the `sudo` group, that is the operator's account) join the `docker` group so that `docker` works without `sudo` or a password. Docker group membership is root-equivalent, so anyone controlling that account, for example through a stolen SSH key or an unlocked console, gains root without knowing its password. This is an accepted risk for a single-operator appliance, in line with the privileged Gladys container.
 - Root is locked and no known account or password exists: the only account is the one the operator creates interactively on the identity screen. Unattended CI media use a throwaway account instead; they are never published, and production validation and ISO inspection reject any embedded identity.
 - The OpenSSH server is selected by default so that the appliance can be maintained without a screen. As on a standard Ubuntu Server, it accepts the operator's password unless keys are imported on the SSH screen. Password login over the local network is an accepted risk; operators who do not want it can uncheck the server or import keys.

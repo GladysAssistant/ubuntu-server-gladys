@@ -65,29 +65,35 @@ class InternalDiskTests(unittest.TestCase):
             ["/dev/nvme0n1", "/dev/sdb", "/dev/mmcblk0"],
         )
 
-    def test_ignores_external_virtual_small_and_in_use_disks(self) -> None:
+    def test_ignores_external_virtual_and_small_disks(self) -> None:
         devices = [
-            disk("sdb", tran="usb"),
-            disk("sdc", tran="sata", hotplug=True),
-            disk("sdd", tran="sata", rm=True),
-            disk("sde", tran="sata", ro=True),
+            disk("sdb", tran="usb", rm=True, hotplug=True),
             disk("zram0", tran=None),
             disk("loop0", tran=None),
             disk("mmcblk0boot0", tran=None),
-            disk("sdf", tran="sata", size=8 * GiB),
+            disk("sdf", tran="sata", size=8 * GiB, hotplug=True),
+        ]
+        self.assertEqual(single_disk_storage.internal_disks(devices), [])
+
+    def test_flagged_or_mounted_disks_are_uncertain_not_ignored(self) -> None:
+        for flagged in (
+            disk("sdc", tran="sata", hotplug=True),
+            disk("nvme1n1", hotplug=True),
+            disk("sdd", tran="sata", rm=True),
+            disk("sde", tran="sata", ro=True),
+            disk("sdf", tran="sata", rm="1"),
             disk(
                 "sdg",
                 tran="sata",
                 children=[{"name": "sdg1", "path": "/dev/sdg1", "type": "part", "mountpoints": ["[SWAP]"]}],
             ),
-        ]
-        self.assertEqual(single_disk_storage.internal_disks(devices), [])
+        ):
+            with self.subTest(flagged["name"]):
+                with self.assertRaisesRegex(single_disk_storage.UncertainDisk, flagged["path"]):
+                    single_disk_storage.internal_disks([disk("sda", tran="sata"), flagged])
 
     def test_accepts_legacy_string_flags(self) -> None:
-        devices = [
-            disk("vda", tran=None, rm="0", ro="0", hotplug="0", size=str(32 * GiB)),
-            disk("sdb", tran="sata", rm="1"),
-        ]
+        devices = [disk("vda", tran=None, rm="0", ro="0", hotplug="0", size=str(32 * GiB))]
         self.assertEqual(single_disk_storage.internal_disks(devices), ["/dev/vda"])
 
 
@@ -121,14 +127,47 @@ class AutoinstallRewriteTests(unittest.TestCase):
             {"layout": {"name": "lvm", "sizing-policy": "all", "match": {"path": "/dev/nvme0n1"}}},
         )
 
-    def test_several_or_no_disks_keep_the_storage_screen(self) -> None:
+    def test_several_none_or_uncertain_disks_keep_the_storage_screen(self) -> None:
         source = ROOT / "autoinstall" / "autoinstall.yaml"
         original = yaml.safe_load(source.read_text(encoding="utf-8"))
-        for devices in ((install_media(),), (disk("nvme0n1"), disk("sdb", tran="sata"))):
+        for devices in (
+            (install_media(),),
+            (disk("nvme0n1"), disk("sdb", tran="sata")),
+            # An NVMe drive on a hot-plug capable port must not leave the
+            # SATA disk as the single candidate.
+            (install_media(), disk("nvme0n1", hotplug=True), disk("sdb", tran="sata")),
+        ):
             with self.subTest(devices=[device["name"] for device in devices]):
                 message, document = self._run(source, *devices)
                 self.assertIn("keeping the storage screen", message)
                 self.assertEqual(document, original)
+
+    def test_document_without_the_top_level_key(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "autoinstall.yaml"
+            config = yaml.safe_load(
+                (ROOT / "autoinstall" / "autoinstall.yaml").read_text(encoding="utf-8")
+            )["autoinstall"]
+            path.write_text(yaml.safe_dump(config), encoding="utf-8")
+
+            message = single_disk_storage.run(path, lsblk(disk("nvme0n1")))
+
+            self.assertIn("skipping the storage screen", message)
+            document = yaml.safe_load(path.read_text(encoding="utf-8"))
+            self.assertEqual(document["storage"]["layout"]["match"], {"path": "/dev/nvme0n1"})
+            self.assertNotIn("storage", document["interactive-sections"])
+
+    def test_storage_is_never_the_last_interactive_section_removed(self) -> None:
+        # Without an interactive section Subiquity installs without asking.
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "autoinstall.yaml"
+            source = "autoinstall:\n  interactive-sections: [storage]\n  storage: {layout: {name: lvm}}\n"
+            path.write_text(source, encoding="utf-8")
+
+            message = single_disk_storage.run(path, lsblk(disk("nvme0n1")))
+
+            self.assertIn("keeping the storage screen", message)
+            self.assertEqual(path.read_text(encoding="utf-8"), source)
 
     def test_unattended_ci_media_stay_unchanged(self) -> None:
         source = ROOT / "autoinstall" / "autoinstall-ci.yaml"

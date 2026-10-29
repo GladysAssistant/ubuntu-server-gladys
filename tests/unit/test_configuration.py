@@ -2,11 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
-import os
 import re
-import shutil
-import subprocess
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -75,48 +71,6 @@ class AutoinstallConfigurationTests(unittest.TestCase):
         self.assertTrue(identity["password"].startswith("$6$"))
         self.assertEqual(ci, production)
 
-    @unittest.skipUnless(shutil.which("sh"), "requires a POSIX shell")
-    def test_late_command_grows_only_the_guided_root_volume(self) -> None:
-        commands = load_autoinstall("autoinstall.yaml")["late-commands"]
-        grow = next(command for command in commands if "lvextend" in " ".join(command))
-        root = "/dev/mapper/ubuntu--vg-ubuntu--lv"
-        cases = {
-            # lv_name, vg_free_count, lvextend status: expected lvextend call
-            "scaled guided volume": ("ubuntu-lv", "2048", 0, True),
-            "whole-disk volume": ("ubuntu-lv", "0", 0, False),
-            "custom volume": ("data", "2048", 0, False),
-            "not a volume": (None, "", 0, False),
-            "lvextend failure": ("ubuntu-lv", "2048", 5, True),
-        }
-        for name, (lv_name, free, status, expect_call) in cases.items():
-            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
-                bin_dir = Path(directory)
-                calls = bin_dir / "calls"
-                lvs_name = f"echo '  {lv_name}'" if lv_name else "exit 5"
-                scripts = {
-                    "findmnt": f"echo {root}",
-                    "lvs": (
-                        'case "$*" in *lv_name*) '
-                        f"{lvs_name};; *vg_free_count*) echo '  {free}';; esac"
-                    ),
-                    "lvextend": f'echo "$*" >> {calls}; exit {status}',
-                }
-                for tool, body in scripts.items():
-                    (bin_dir / tool).write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
-                    (bin_dir / tool).chmod(0o755)
-                environment = dict(os.environ, PATH=f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
-
-                result = subprocess.run(grow, env=environment, capture_output=True, text=True)
-
-                self.assertEqual(result.returncode, 0, result.stderr)
-                if expect_call:
-                    self.assertEqual(
-                        calls.read_text(encoding="utf-8"),
-                        f"--resizefs -l +100%FREE {root}\n",
-                    )
-                else:
-                    self.assertFalse(calls.exists())
-
     def test_late_commands_verify_before_extracting_payload(self) -> None:
         commands = load_autoinstall("autoinstall.yaml")["late-commands"]
         rendered = "\n".join(command if isinstance(command, str) else " ".join(command) for command in commands)
@@ -126,6 +80,8 @@ class AutoinstallConfigurationTests(unittest.TestCase):
         self.assertLess(verify_at, extract_at)
         self.assertLess(extract_at, rendered.index("> /target/etc/gladys-installer/language"))
         self.assertNotIn("daemon-reload", rendered)
+        # The root volume keeps the size confirmed on the storage screen.
+        self.assertNotIn("lvextend", rendered)
         self.assertIn("systemctl --root=/target enable gladys-firstboot.service", rendered)
         self.assertIn("systemctl --root=/target mask getty@tty1.service", rendered)
 

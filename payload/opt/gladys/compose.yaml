@@ -23,6 +23,8 @@ services:
       - /var/lib/gladysassistant:/var/lib/gladysassistant
       - /dev:/dev
       - /run/udev:/run/udev:ro
+      # As on the starter kits. :ro protects the directory only: Gladys can
+      # still call any host service on the system bus.
       - /run/dbus:/run/dbus:ro
 
   watchtower:

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -204,29 +205,17 @@ def colorize(screen: str) -> str:
     return "\n".join(lines)
 
 
-def service_states(addresses: list[str]) -> dict[str, bool]:
-    def succeeds(argv: list[str]) -> bool:
-        try:
-            common.run_command(argv, timeout=5)
-        except (common.CommandError, OSError):
-            return False
-        return True
-
-    def gladys_running() -> bool:
-        try:
-            result = common.run_command(
-                ["docker", "inspect", "--format", "{{.State.Running}}", "gladys"],
-                timeout=5,
-            )
-        except (common.CommandError, OSError):
-            return False
-        return result.stdout.strip().lower() == "true"
-
-    return {
-        "ethernet": bool(addresses),
-        "docker": succeeds(["systemctl", "is-active", "--quiet", "docker.service"]),
-        "gladys": gladys_running(),
-    }
+def service_states(addresses: list[str], timeout: float = 5) -> dict[str, bool]:
+    """Return the states the ready screen shows."""
+    try:
+        result = common.run_command(
+            ["docker", "inspect", "--format", "{{.State.Running}}", "gladys"],
+            timeout=timeout,
+        )
+        gladys_running = result.stdout.strip().lower() == "true"
+    except (common.CommandError, OSError, subprocess.TimeoutExpired):
+        gladys_running = False
+    return {"ethernet": bool(addresses), "gladys": gladys_running}
 
 
 def main() -> int:

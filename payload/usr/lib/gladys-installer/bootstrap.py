@@ -254,7 +254,11 @@ class Bootstrap:
         """
         timezone = self._host_timezone()
         if timezone in DEFAULT_TIMEZONES:
-            detected = self.timezone_detector()
+            try:
+                detected = self.timezone_detector()
+            except Exception:  # a lookup bug must never stop first boot
+                LOG.warning("Time zone lookup failed; keeping UTC", exc_info=True)
+                detected = None
             try:
                 known = self.runner(["timedatectl", "list-timezones"], timeout=30).stdout.split()
                 if detected and detected in known:
@@ -362,10 +366,17 @@ class Bootstrap:
     def grant_docker_access(self) -> None:
         # Docker group membership is root-equivalent, like the sudo the
         # administrators already hold; it spares them the password for docker.
+        # It is a convenience, so a persistent failure never blocks READY.
         for account in self.administrators():
-            self._retry_command(
-                ["usermod", "--append", "--groups", "docker", account], timeout=60
-            )
+            command = ["usermod", "--append", "--groups", "docker", account]
+            try:
+                retry_operation(
+                    lambda: self._run_retryable(command, timeout=60),
+                    sleep=self.sleep,
+                    max_attempts=5,
+                )
+            except common.RetryableError:
+                LOG.warning("Unable to give %s access to Docker", account, exc_info=True)
 
     def quiet_ubuntu_login_messages(self) -> None:
         """Leave the Gladys status as the main login message.
@@ -373,6 +384,9 @@ class Bootstrap:
         dpkg-divert moves the scripts aside so package updates keep them
         there, without the conffile edits that stop unattended upgrades.
         Masking motd-news.timer also stops its daily request to Ubuntu.
+        Each command runs once: dpkg-divert fails at once while unattended
+        upgrades hold the dpkg lock, and waiting would only delay READY for
+        a cosmetic change. A later boot before READY retries what is left.
         """
         self.paths.motd_disabled.mkdir(parents=True, exist_ok=True)
         commands = [
@@ -387,12 +401,8 @@ class Bootstrap:
         commands.append(["systemctl", "mask", "--now", "motd-news.timer"])
         for command in commands:
             try:
-                retry_operation(
-                    lambda: self._run_retryable(command, timeout=60),
-                    sleep=self.sleep,
-                    max_attempts=5,
-                )
-            except common.RetryableError:
+                self.runner(command, timeout=60)
+            except COMMAND_FAILURES:
                 LOG.warning("Unable to quiet an Ubuntu login message: %s", command, exc_info=True)
         self.paths.motd_news_cache.unlink(missing_ok=True)
 

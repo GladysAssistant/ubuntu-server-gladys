@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import argparse
 import copy
+import importlib.util
 import json
+import shutil
+import tempfile
 from pathlib import Path
 
 import jsonschema
@@ -26,16 +29,26 @@ SINGLE_DISK_EARLY_COMMAND = [
     "-c",
     "python3 /cdrom/gladys/single-disk-storage.py /autoinstall.yaml || true",
 ]
-# Grows the guided root volume, which the storage screen sizes to half the
-# disk, over its whole volume group. Never fails.
-GROW_ROOT_LATE_COMMAND = [
-    "sh",
-    "-c",
-    'lv=$(findmnt -n -o SOURCE /target) && '
-    '[ "$(lvs --noheadings -o lv_name "$lv" 2>/dev/null | tr -d " ")" = ubuntu-lv ] && '
-    '[ "$(lvs --noheadings -o vg_free_count "$lv" | tr -d " ")" -gt 0 ] && '
-    'lvextend --resizefs -l +100%FREE "$lv" || true',
-]
+SINGLE_DISK_SCRIPT = Path(__file__).resolve().parents[1] / "autoinstall" / "single-disk-storage.py"
+SINGLE_DISK_PROJECTION = "autoinstall-single-disk.yaml"
+SIMULATED_DISK = "/dev/nvme0n1"
+SIMULATED_LSBLK = json.dumps(
+    {
+        "blockdevices": [
+            {
+                "name": "nvme0n1",
+                "path": SIMULATED_DISK,
+                "type": "disk",
+                "rm": False,
+                "ro": False,
+                "hotplug": False,
+                "tran": "nvme",
+                "size": 256 * 1024**3,
+                "mountpoints": [None],
+            }
+        ]
+    }
+)
 
 
 def _load(path: Path) -> dict:
@@ -85,8 +98,6 @@ def _safety_checks(config: dict) -> None:
     if "ssh_pwauth" in user_data:
         raise ConfigurationError("SSH password authentication must follow the SSH screen")
     commands = config.get("late-commands", [])
-    if GROW_ROOT_LATE_COMMAND not in commands:
-        raise ConfigurationError("late commands must grow the root volume over its volume group")
     rendered = "\n".join(
         command if isinstance(command, str) else " ".join(command) for command in commands
     )
@@ -97,6 +108,45 @@ def _safety_checks(config: dict) -> None:
         raise ConfigurationError("late commands must verify and extract the payload") from exc
     if verify_index >= extract_index:
         raise ConfigurationError("payload extraction occurs before verification")
+
+
+def single_disk_document(production_path: Path) -> dict:
+    """Return production as the early command leaves it on a one-disk machine.
+
+    The script runs on a verbatim copy, as Subiquity copies the media
+    document to /autoinstall.yaml, and the result is read back the same way.
+    """
+    spec = importlib.util.spec_from_file_location("single_disk_storage", SINGLE_DISK_SCRIPT)
+    if spec is None or spec.loader is None:
+        raise ConfigurationError(f"unable to load {SINGLE_DISK_SCRIPT}")
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+    with tempfile.TemporaryDirectory() as directory:
+        installed = Path(directory) / "autoinstall.yaml"
+        shutil.copyfile(production_path, installed)
+        try:
+            outcome = script.run(installed, SIMULATED_LSBLK)
+        except Exception as exc:
+            raise ConfigurationError(f"the single disk early command failed: {exc}") from exc
+        if SIMULATED_DISK not in outcome:
+            raise ConfigurationError(f"the single disk early command did not apply: {outcome}")
+        return _load(installed)
+
+
+def _single_disk_checks(production: dict, single_disk: dict) -> None:
+    expected = copy.deepcopy(production)
+    expected["interactive-sections"].remove("storage")
+    expected["storage"]["layout"]["match"] = {"path": SIMULATED_DISK}
+    if single_disk != expected:
+        raise ConfigurationError(
+            "the single disk early command must only make storage non-interactive on its disk"
+        )
+    # Subiquity asks for the destructive-action confirmation only while a
+    # section stays interactive (subiquity/server/controllers/install.py).
+    if not single_disk["interactive-sections"]:
+        raise ConfigurationError(
+            "a single disk installation must stay interactive to confirm the erasure"
+        )
 
 
 def _require_authoritative_iso_schema(schema: object) -> dict:
@@ -131,6 +181,13 @@ def _require_authoritative_iso_schema(schema: object) -> dict:
     return schema
 
 
+def _validate_schema(path: object, config: dict, schema: dict) -> None:
+    try:
+        jsonschema.validate(config, schema)
+    except jsonschema.ValidationError as exc:
+        raise ConfigurationError(f"{path} failed the ISO Subiquity schema: {exc.message}") from exc
+
+
 def validate_repository_configs(
     production_path: Path,
     ci_path: Path,
@@ -147,10 +204,7 @@ def validate_repository_configs(
         raise ConfigurationError("unable to load ISO Autoinstall schema") from exc
     schema = _require_authoritative_iso_schema(schema)
     for path, config in ((production_path, production), (ci_path, ci)):
-        try:
-            jsonschema.validate(config, schema)
-        except jsonschema.ValidationError as exc:
-            raise ConfigurationError(f"{path} failed the ISO Subiquity schema: {exc.message}") from exc
+        _validate_schema(path, config, schema)
     production_comparable = copy.deepcopy(production)
     ci_comparable = copy.deepcopy(ci)
     if (
@@ -176,6 +230,9 @@ def validate_repository_configs(
         raise ConfigurationError(str(exc)) from exc
     if enforce_safety:
         _safety_checks(production)
+        single_disk = single_disk_document(production_path)
+        _validate_schema(f"{production_path} on a single disk machine", single_disk, schema)
+        _single_disk_checks(production, single_disk)
 
 
 def write_canonical_validator_projections(
@@ -198,15 +255,20 @@ def write_canonical_validator_projections(
             f"unable to create Canonical validator output directory {output_dir}"
         ) from exc
 
-    for input_path in (production_path, ci_path):
-        config = copy.deepcopy(_load(input_path))
+    # The single disk projection covers the document Subiquity installs
+    # from after the early command, which the media files never show.
+    for input_path, name, config in (
+        (production_path, production_path.name, _load(production_path)),
+        (ci_path, ci_path.name, _load(ci_path)),
+        (production_path, SINGLE_DISK_PROJECTION, single_disk_document(production_path)),
+    ):
         source = config.get("source")
         if not isinstance(source, dict) or source.get("id") != "ubuntu-server-minimal":
             raise ConfigurationError(
                 f"{input_path} must select ubuntu-server-minimal before projection"
             )
         source["id"] = CANONICAL_VALIDATOR_SOURCE_ID
-        output_path = output_dir / input_path.name
+        output_path = output_dir / name
         try:
             output_path.write_text(
                 yaml.safe_dump({"autoinstall": config}, sort_keys=False),

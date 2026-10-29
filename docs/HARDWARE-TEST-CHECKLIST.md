@@ -23,7 +23,8 @@ For every run, record:
 - [ ] SATA SSD target is displayed correctly and installation succeeds.
 - [ ] Single internal disk system skips the storage screen, installs on that disk with LVM whose root volume fills the disk (`df -h /`), and still asks the destructive-action confirmation.
 - [ ] Single internal disk system with an additional USB drive plugged in still skips the storage screen and leaves the USB drive untouched.
-- [ ] Multi disk system shows the storage screen with LVM preselected, identifies every disk correctly, erases only the confirmed target, and ends with a root volume that fills that disk (`df -h /`).
+- [ ] A system whose only internal disk, or one of whose disks, reports `HOTPLUG` or `RM` as 1 in `lsblk -o NAME,TRAN,HOTPLUG,RM` shows the storage screen.
+- [ ] Multi disk system shows the storage screen with LVM preselected, identifies every disk correctly, erases only the confirmed target, and ends with the root volume size confirmed on the summary screen (`df -h /`).
 
 ## Firmware and boot
 

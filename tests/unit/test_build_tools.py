@@ -12,6 +12,7 @@ import tarfile
 import tempfile
 import textwrap
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -550,14 +551,21 @@ class AutoinstallValidatorTests(unittest.TestCase):
                             "Canonical controller validation requires its "
                             "synthetic source catalog"
                         )
-                    tracked_input = (
-                        Path(os.environ["TRACKED_AUTOINSTALL_DIR"])
-                        / Path(arguments.input.name).name
+                    input_name = Path(arguments.input.name).name
+                    single_disk = input_name == "autoinstall-single-disk.yaml"
+                    tracked_input = Path(os.environ["TRACKED_AUTOINSTALL_DIR"]) / (
+                        "autoinstall.yaml" if single_disk else input_name
                     )
                     expected_document = yaml.safe_load(
                         tracked_input.read_text(encoding="utf-8")
                     )
-                    expected_document["autoinstall"]["source"]["id"] = "synthesized"
+                    expected = expected_document["autoinstall"]
+                    expected["source"]["id"] = "synthesized"
+                    if single_disk:
+                        expected["interactive-sections"].remove("storage")
+                        expected["storage"]["layout"]["match"] = {
+                            "path": "/dev/nvme0n1"
+                        }
                     if input_document != expected_document:
                         parser.error(
                             "Canonical projection changed fields other than source.id"
@@ -913,7 +921,7 @@ class AutoinstallValidatorTests(unittest.TestCase):
             validator_schema_paths = validator_schema_trace.read_text(
                 encoding="utf-8"
             ).splitlines()
-            self.assertEqual(2, len(validator_schema_paths))
+            self.assertEqual(3, len(validator_schema_paths))
             self.assertTrue(
                 all(
                     Path(path).name == "autoinstall-schema.json"
@@ -923,10 +931,8 @@ class AutoinstallValidatorTests(unittest.TestCase):
             validator_working_directories = validator_cwd_trace.read_text(
                 encoding="utf-8"
             ).splitlines()
-            self.assertEqual(2, len(validator_working_directories))
-            self.assertEqual(
-                validator_working_directories[0], validator_working_directories[1]
-            )
+            self.assertEqual(3, len(validator_working_directories))
+            self.assertEqual(1, len(set(validator_working_directories)))
             runtime_directory = Path(validator_working_directories[0])
             self.assertEqual("subiquity-validator", runtime_directory.name)
             self.assertNotEqual(validator.resolve(), runtime_directory.resolve())
@@ -937,7 +943,11 @@ class AutoinstallValidatorTests(unittest.TestCase):
                 ).splitlines()
             ]
             self.assertEqual(
-                {"autoinstall.yaml", "autoinstall-ci.yaml"},
+                {
+                    "autoinstall.yaml",
+                    "autoinstall-ci.yaml",
+                    "autoinstall-single-disk.yaml",
+                },
                 {path.name for path in validator_input_paths},
             )
             self.assertTrue(
@@ -1065,7 +1075,6 @@ class AutoinstallValidatorTests(unittest.TestCase):
             ("      name: lvm\n", "      name: lvm\n      password: gladys\n"),
             ("      sizing-policy: all\n", ""),
             ("/autoinstall.yaml || true", "/autoinstall.yaml"),
-            ("lvextend --resizefs -l +100%FREE", "lvextend --resizefs -l +50%FREE"),
         ):
             with self.subTest(invalid=invalid), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -1088,6 +1097,48 @@ class AutoinstallValidatorTests(unittest.TestCase):
                     validate_config.validate_repository_configs(
                         production, ci, schema, catalog
                     )
+
+    def test_validator_checks_the_document_left_by_the_single_disk_script(self) -> None:
+        # Each script misbehaves on a one-disk machine; the media files alone
+        # would still pass.
+        broken_scripts = {
+            "drops every section": (
+                "import yaml\n"
+                "def run(path, lsblk):\n"
+                "    document = yaml.safe_load(path.read_text())\n"
+                "    document['autoinstall']['interactive-sections'] = []\n"
+                "    document['autoinstall']['storage']['layout']['match'] = {'path': '/dev/nvme0n1'}\n"
+                "    path.write_text(yaml.safe_dump(document))\n"
+                "    return 'single internal disk /dev/nvme0n1'\n"
+            ),
+            "drops the top-level key": (
+                "import yaml\n"
+                "def run(path, lsblk):\n"
+                "    document = yaml.safe_load(path.read_text())['autoinstall']\n"
+                "    path.write_text(yaml.safe_dump(document))\n"
+                "    return 'single internal disk /dev/nvme0n1'\n"
+            ),
+            "crashes": "def run(path, lsblk):\n    raise KeyError('autoinstall')\n",
+            "keeps the screen": "def run(path, lsblk):\n    return 'keeping the storage screen'\n",
+        }
+        for name, source in broken_scripts.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                script = root / "single-disk-storage.py"
+                script.write_text(source, encoding="utf-8")
+                schema = root / "schema.json"
+                catalog = root / "catalog.yaml"
+                schema.write_text(json.dumps(self._authoritative_schema()), encoding="utf-8")
+                catalog.write_text("- id: ubuntu-server-minimal\n", encoding="utf-8")
+
+                with mock.patch.object(validate_config, "SINGLE_DISK_SCRIPT", script):
+                    with self.assertRaises(validate_config.ConfigurationError):
+                        validate_config.validate_repository_configs(
+                            ROOT / "autoinstall" / "autoinstall.yaml",
+                            ROOT / "autoinstall" / "autoinstall-ci.yaml",
+                            schema,
+                            catalog,
+                        )
 
     def test_validator_rejects_unrelated_ci_drift(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

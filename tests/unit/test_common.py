@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import subprocess
 import stat
 import sys
@@ -205,6 +206,22 @@ class GeoIPTimezoneTests(unittest.TestCase):
     def test_missing_answer_or_unreachable_service_returns_none(self) -> None:
         self.assertIsNone(self._lookup(b"<Response><CountryCode>FR</CountryCode></Response>"))
         self.assertIsNone(common.geoip_timezone("http://127.0.0.1:1/lookup", timeout=0.1))
+
+    def test_malformed_http_answer_returns_none(self) -> None:
+        # Captive portals and broken proxies can answer with anything.
+        with socket.create_server(("127.0.0.1", 0)) as server:
+
+            def answer() -> None:
+                connection, _address = server.accept()
+                with connection:
+                    connection.recv(4096)
+                    connection.sendall(b"NOT HTTP\r\n\r\n")
+
+            thread = threading.Thread(target=answer, daemon=True)
+            thread.start()
+            port = server.getsockname()[1]
+            self.assertIsNone(common.geoip_timezone(f"http://127.0.0.1:{port}/lookup", timeout=1))
+            thread.join(timeout=2)
 
     def test_uses_ubuntu_geoip_over_https(self) -> None:
         self.assertEqual(common.GEOIP_URL, "https://geoip.ubuntu.com/lookup")

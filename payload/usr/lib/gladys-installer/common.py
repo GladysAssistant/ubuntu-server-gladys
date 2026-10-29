@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import http.client
 import itertools
 import json
 import os
@@ -259,7 +260,8 @@ def geoip_timezone(url: str = GEOIP_URL, timeout: float = 10.0) -> str | None:
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             body = response.read(4096).decode("utf-8", "replace")
-    except (OSError, urllib.error.URLError, ValueError):
+    # Captive portals and broken proxies answer with malformed HTTP.
+    except (OSError, http.client.HTTPException, ValueError):
         return None
     match = re.search(r"<TimeZone>([^<]*)</TimeZone>", body)
     return match.group(1).strip() if match else None
@@ -285,9 +287,9 @@ def parse_global_ipv4(ip_json: str) -> list[str]:
     return sorted(addresses)
 
 
-def current_ipv4_addresses() -> list[str]:
+def current_ipv4_addresses(timeout: float = 10) -> list[str]:
     try:
-        result = run_command(["ip", "-j", "-4", "address", "show"], timeout=10)
+        result = run_command(["ip", "-j", "-4", "address", "show"], timeout=timeout)
         return parse_global_ipv4(result.stdout)
     except (CommandError, json.JSONDecodeError, OSError, subprocess.TimeoutExpired):
         return []

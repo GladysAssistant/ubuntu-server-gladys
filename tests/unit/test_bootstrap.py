@@ -217,11 +217,15 @@ class BootstrapTests(unittest.TestCase):
             "unknown zone": (TimezoneRunner(), "Mars/Olympus_Mons"),
             "injected value": (TimezoneRunner(), "Europe/Paris\nEVIL=1"),
             "timedatectl failure": (TimezoneRunner(fail=True), "Europe/Paris"),
+            "lookup crash": (TimezoneRunner(), RuntimeError("malformed answer")),
         }
         for name, (runner, detected) in cases.items():
             with self.subTest(name), tempfile.TemporaryDirectory() as directory:
                 installer = self.make_installer(directory, runner)
-                installer.timezone_detector = lambda: detected
+                installer.timezone_detector = mock.Mock(
+                    side_effect=detected if isinstance(detected, Exception) else None,
+                    return_value=detected,
+                )
 
                 installer.configure_timezone()
 
@@ -280,6 +284,8 @@ class BootstrapTests(unittest.TestCase):
                     runner.commands,
                 )
                 self.assertIn(("systemctl", "mask", "--now", "motd-news.timer"), runner.commands)
+                # A held dpkg lock is not waited for: READY comes first.
+                self.assertEqual(diverted.count(str(installer.paths.motd / "10-help-text")), 1)
                 self.assertTrue(installer.paths.motd_disabled.is_dir())
                 self.assertFalse(installer.paths.motd_news_cache.exists())
 
@@ -296,6 +302,25 @@ class BootstrapTests(unittest.TestCase):
                     runner.commands,
                     [("usermod", "--append", "--groups", "docker", name) for name in administrators],
                 )
+
+    def test_docker_access_failure_never_blocks_ready(self) -> None:
+        class FailingUsermodRunner(FakeRunner):
+            def __call__(self, argv: list[str], **kwargs: object) -> common.CommandResult:
+                if argv[0] == "usermod" and argv[-1] == "operator":
+                    self.commands.append(tuple(argv))
+                    raise OSError("group database locked")
+                return super().__call__(argv, **kwargs)
+
+        with tempfile.TemporaryDirectory() as directory:
+            runner = FailingUsermodRunner()
+            installer = self.make_installer(directory, runner)
+            installer.administrators = lambda: ["operator", "second"]
+
+            installer.grant_docker_access()
+
+            usermod = ("usermod", "--append", "--groups", "docker")
+            self.assertEqual(runner.commands.count((*usermod, "operator")), 5)
+            self.assertEqual(runner.commands[-1], (*usermod, "second"))
 
     def test_administrator_accounts_are_ordinary_sudo_members(self) -> None:
         uids = {"operator": 1000, "nobody": 65534, "service": 999, "second": 1001}

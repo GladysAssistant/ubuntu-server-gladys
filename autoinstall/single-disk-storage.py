@@ -4,9 +4,9 @@
 Runs as an Autoinstall early command, before the first installer screen.
 Subiquity reloads the Autoinstall document afterwards, so dropping "storage"
 from the interactive sections installs onto that disk with the configured
-layout. The other sections stay interactive, so the installer still asks for
-the destructive-action confirmation before erasing anything. Any doubt keeps
-the storage screen.
+layout. Subiquity asks for the destructive-action confirmation only while some
+section stays interactive, so storage is never the last one dropped. Any doubt
+keeps the storage screen.
 """
 
 from __future__ import annotations
@@ -35,6 +35,10 @@ LSBLK = [
 ]
 
 
+class UncertainDisk(ValueError):
+    """A disk that might be internal, so the operator must choose."""
+
+
 def _flag(value: object) -> bool:
     # lsblk reports booleans or "0"/"1" strings depending on its version.
     return value is True or value in ("1", 1)
@@ -47,34 +51,61 @@ def _in_use(device: dict) -> bool:
 
 
 def internal_disks(devices: list[dict]) -> list[str]:
-    """Return the paths of the disks the installer could erase unattended."""
+    """Return the paths of the disks the installer could erase unattended.
+
+    Raises UncertainDisk for a disk that is neither clearly internal nor
+    clearly out of scope: an NVMe drive on a hot-plug capable port, for
+    example, would otherwise go uncounted and leave another disk as the
+    single candidate.
+    """
     disks = []
     for device in devices:
         if device.get("type") != "disk":
             continue
         if VIRTUAL_DISK_NAME.match(device.get("name") or ""):
             continue
-        if _flag(device.get("rm")) or _flag(device.get("ro")) or _flag(device.get("hotplug")):
-            continue
         if (device.get("tran") or "") in EXTERNAL_TRANSPORTS:
             continue
         if int(device.get("size") or 0) < MINIMUM_DISK_BYTES:
             continue
-        # The installation media and anything else mounted stay untouched.
+        for field in ("rm", "ro", "hotplug"):
+            if _flag(device.get(field)):
+                raise UncertainDisk(f"{device['path']} is flagged {field}")
         if _in_use(device):
-            continue
+            raise UncertainDisk(f"{device['path']} is mounted")
         disks.append(device["path"])
     return disks
 
 
-def preselect_disk(config: dict, disk: str) -> bool:
-    """Make storage non-interactive on the given disk; False if not applicable."""
+def autoinstall_section(document: object) -> dict:
+    """Return the Autoinstall settings, with or without the top-level key.
+
+    Subiquity copies the media document to /autoinstall.yaml as is and
+    accepts both forms when it reads it back.
+    """
+    if isinstance(document, dict) and "autoinstall" in document:
+        document = document["autoinstall"]
+    if not isinstance(document, dict):
+        raise ValueError("the Autoinstall document is not a mapping")
+    return document
+
+
+def preselect_disk(config: dict, disk: str) -> str | None:
+    """Make storage non-interactive on the given disk.
+
+    Returns why it did not, or None once the configuration is changed.
+    """
     sections = config.get("interactive-sections") or []
     if "storage" not in sections:
-        return False
-    config["interactive-sections"] = [section for section in sections if section != "storage"]
+        return "storage is not interactive"
+    remaining = [section for section in sections if section != "storage"]
+    # Subiquity skips its destructive-action confirmation when no section
+    # is interactive (subiquity/server/controllers/install.py).
+    if not remaining:
+        return "no other interactive section would ask for confirmation"
+    config["interactive-sections"] = remaining
     config["storage"]["layout"]["match"] = {"path": disk}
-    return True
+    return None
 
 
 def _write_atomically(path: Path, document: dict) -> None:
@@ -90,12 +121,16 @@ def _write_atomically(path: Path, document: dict) -> None:
 
 
 def run(autoinstall_path: Path, lsblk_output: str) -> str:
-    disks = internal_disks(json.loads(lsblk_output)["blockdevices"])
+    try:
+        disks = internal_disks(json.loads(lsblk_output)["blockdevices"])
+    except UncertainDisk as exc:
+        return f"{exc}, keeping the storage screen"
     if len(disks) != 1:
         return f"{len(disks)} internal disks found, keeping the storage screen"
     document = yaml.safe_load(autoinstall_path.read_text(encoding="utf-8"))
-    if not preselect_disk(document["autoinstall"], disks[0]):
-        return "storage is not interactive, nothing to do"
+    reason = preselect_disk(autoinstall_section(document), disks[0])
+    if reason is not None:
+        return f"{reason}, keeping the storage screen"
     _write_atomically(autoinstall_path, document)
     return f"single internal disk {disks[0]}, skipping the storage screen"
 
