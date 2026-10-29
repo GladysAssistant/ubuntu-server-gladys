@@ -48,6 +48,22 @@ The completion marker is `/var/lib/gladys-installer/completed`. The sibling `sta
 - Kernel and core library updates only take effect after a reboot, which never happens automatically. Ubuntu creates `/var/run/reboot-required` when one is pending; log in as described under [Diagnostics](#diagnostics) and run `sudo reboot`. Gladys and Watchtower start again on their own.
 - The only account is the one created during installation. The OpenSSH server is installed unless it was unchecked then. Root stays locked and no default credentials exist: see [SECURITY.md](SECURITY.md).
 
+## Time zone
+
+First boot detects the time zone from the public IP address and applies it to both the system and Gladys; it falls back to UTC if detection fails. To change it later, for example to `Europe/Paris`:
+
+```bash
+sudo timedatectl set-timezone Europe/Paris
+```
+
+```bash
+echo GLADYS_TZ=Europe/Paris | sudo tee /opt/gladys/.env
+```
+
+```bash
+docker compose -f /opt/gladys/compose.yaml up -d gladys
+```
+
 ## Diagnostics
 
 `gladys-diagnostics` prints safe, non-secret support information: installer and Ubuntu versions, boot mode, network state, disk usage, Docker and Compose status, service states, and recent first boot journal lines.

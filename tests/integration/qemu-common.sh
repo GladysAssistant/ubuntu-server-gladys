@@ -426,6 +426,17 @@ assert_installer_language() {
 	}
 }
 
+# First boot detects the time zone and hands it to Gladys through Compose;
+# a failed lookup leaves UTC, so only the shape of the value is asserted.
+assert_gladys_timezone() {
+	local disk="$1" environment
+	environment="$(virt-cat -a "$disk" /opt/gladys/.env)"
+	[[ "$environment" =~ ^GLADYS_TZ=[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+)*$ ]] || {
+		printf 'Gladys time zone not recorded: %s\n' "$environment" >&2
+		return 1
+	}
+}
+
 assert_dpkg_barrier_state() {
 	local disk="$1" expected="$2" temporary update_name
 	[[ "$expected" == "interrupted" || "$expected" == "installed" ]] || return 64

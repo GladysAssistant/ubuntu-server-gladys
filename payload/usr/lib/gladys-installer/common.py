@@ -6,6 +6,7 @@ from __future__ import annotations
 import itertools
 import json
 import os
+import re
 import signal
 import socket
 import ssl
@@ -23,6 +24,8 @@ from typing import Callable, Iterator, Mapping, Sequence
 COMPOSE_FILE = "/opt/gladys/compose.yaml"
 INTERNET_HOST = "archive.ubuntu.com"
 INTERNET_PORT = 443
+# The geolocation service the Ubuntu installer itself queries.
+GEOIP_URL = "https://geoip.ubuntu.com/lookup"
 COMMAND_TERMINATION_GRACE = 2.0
 
 
@@ -92,6 +95,10 @@ def _fsync_directory(directory: Path) -> None:
 
 
 def atomic_write_json(path: Path | str, data: Mapping[str, object], mode: int = 0o644) -> None:
+    atomic_write_text(path, json.dumps(data, ensure_ascii=False, sort_keys=True) + "\n", mode)
+
+
+def atomic_write_text(path: Path | str, text: str, mode: int = 0o644) -> None:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
@@ -101,8 +108,7 @@ def atomic_write_json(path: Path | str, data: Mapping[str, object], mode: int = 
     try:
         os.chmod(temporary, mode)
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
-            json.dump(data, handle, ensure_ascii=False, sort_keys=True)
-            handle.write("\n")
+            handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, destination)
@@ -245,6 +251,18 @@ def http_ready(url: str = "http://127.0.0.1/", timeout: float = 5.0) -> bool:
         return exc.code < 400
     except (OSError, urllib.error.URLError, ValueError):
         return False
+
+
+def geoip_timezone(url: str = GEOIP_URL, timeout: float = 10.0) -> str | None:
+    """Return the time zone Ubuntu's geolocation service reports for this IP."""
+    request = urllib.request.Request(url, method="GET", headers={"User-Agent": "gladys-installer/1"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            body = response.read(4096).decode("utf-8", "replace")
+    except (OSError, urllib.error.URLError, ValueError):
+        return None
+    match = re.search(r"<TimeZone>([^<]*)</TimeZone>", body)
+    return match.group(1).strip() if match else None
 
 
 def parse_global_ipv4(ip_json: str) -> list[str]:

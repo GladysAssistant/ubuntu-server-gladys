@@ -35,7 +35,7 @@ The ISO never embeds a numbered Gladys release, a container image, a known passw
 9. Follow the progress on the tty1 console or on the setup web page. Before Gladys starts, the console shows the IPv4 address of the setup page.
 10. Wait for the console to show **Ready**, then open `http://gladysassistant.local`. The displayed IPv4 address remains the fallback when the client network does not support mDNS.
 
-Provisioning requires Internet access over Ethernet. The Ubuntu installation itself can finish offline; first boot then waits safely in the `WAIT_NETWORK` phase and resumes automatically as soon as connectivity appears. Version 1 has no Wi-Fi setup UI.
+Provisioning requires Internet access over Ethernet. The Ubuntu installation itself can finish offline; first boot then waits safely in the `WAIT_NETWORK` phase and resumes automatically as soon as connectivity appears. Version 1 has no Wi-Fi setup UI. The Ubuntu installer does not ask for a time zone: first boot detects it from the public IP address and falls back to UTC, and [docs/OPERATIONS.md](docs/OPERATIONS.md#time-zone) explains how to change it.
 
 Day to day operation, the first boot phases, diagnostics, and troubleshooting are covered in [docs/OPERATIONS.md](docs/OPERATIONS.md).
 

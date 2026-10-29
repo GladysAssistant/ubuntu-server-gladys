@@ -169,5 +169,46 @@ class HttpReadinessTests(unittest.TestCase):
         self.assertFalse(common.http_ready("http://127.0.0.1:1/", timeout=0.1))
 
 
+class _GeoIPHandler(BaseHTTPRequestHandler):
+    body = b""
+
+    def do_GET(self) -> None:  # noqa: N802
+        self.send_response(200)
+        self.send_header("Content-Type", "text/xml")
+        self.end_headers()
+        self.wfile.write(self.body)
+
+    def log_message(self, _format: str, *_args: object) -> None:
+        return
+
+
+class GeoIPTimezoneTests(unittest.TestCase):
+    def _lookup(self, body: bytes) -> str | None:
+        handler = type("Handler", (_GeoIPHandler,), {"body": body})
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            return common.geoip_timezone(f"http://127.0.0.1:{server.server_port}/lookup", timeout=1)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_reads_the_time_zone_of_the_ubuntu_geoip_answer(self) -> None:
+        body = (
+            b"<Response><Ip>192.0.2.1</Ip><CountryCode>FR</CountryCode>"
+            b"<TimeZone>Europe/Paris</TimeZone></Response>"
+        )
+        self.assertEqual(self._lookup(body), "Europe/Paris")
+
+    def test_missing_answer_or_unreachable_service_returns_none(self) -> None:
+        self.assertIsNone(self._lookup(b"<Response><CountryCode>FR</CountryCode></Response>"))
+        self.assertIsNone(common.geoip_timezone("http://127.0.0.1:1/lookup", timeout=0.1))
+
+    def test_uses_ubuntu_geoip_over_https(self) -> None:
+        self.assertEqual(common.GEOIP_URL, "https://geoip.ubuntu.com/lookup")
+
+
 if __name__ == "__main__":
     unittest.main()

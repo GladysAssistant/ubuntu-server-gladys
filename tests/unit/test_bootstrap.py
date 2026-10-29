@@ -39,6 +39,27 @@ class FakeRunner:
         return common.CommandResult(command, 0, stdout, "")
 
 
+class TimezoneRunner(FakeRunner):
+    def __init__(self, host_timezone: str = "Etc/UTC", fail: bool = False) -> None:
+        super().__init__()
+        self.host_timezone = host_timezone
+        self.fail = fail
+
+    def __call__(self, argv: list[str], **kwargs: object) -> common.CommandResult:
+        command = tuple(argv)
+        if command[0] == "timedatectl":
+            self.commands.append(command)
+            if self.fail:
+                raise OSError("timedatectl unavailable")
+            stdout = ""
+            if command[1] == "show":
+                stdout = f"{self.host_timezone}\n"
+            elif command[1] == "list-timezones":
+                stdout = "Etc/UTC\nEurope/Berlin\nEurope/Paris\n"
+            return common.CommandResult(command, 0, stdout, "")
+        return super().__call__(argv, **kwargs)
+
+
 class BootstrapTests(unittest.TestCase):
     def make_installer(self, directory: str, runner: FakeRunner | None = None) -> bootstrap.Bootstrap:
         root = Path(directory)
@@ -51,6 +72,7 @@ class BootstrapTests(unittest.TestCase):
             completed=root / "completed",
             lock=root / "bootstrap.lock",
             compose=compose,
+            compose_env=root / ".env",
             version=version,
             data=root / "data",
             test_mode=root / "test-mode",
@@ -66,6 +88,7 @@ class BootstrapTests(unittest.TestCase):
             port_checker=lambda: True,
             machine=lambda: "x86_64",
             administrators=lambda: ["operator"],
+            timezone_detector=lambda: "Europe/Paris",
         )
 
     def test_completed_marker_skips_every_operation(self) -> None:
@@ -156,6 +179,64 @@ class BootstrapTests(unittest.TestCase):
                 runner.commands,
                 [("systemctl", "enable", "--now", "docker.service")],
             )
+
+    def test_detected_time_zone_is_set_on_a_utc_host_and_given_to_gladys(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runner = TimezoneRunner()
+            installer = self.make_installer(directory, runner)
+
+            installer.configure_timezone()
+
+            self.assertIn(("timedatectl", "set-timezone", "Europe/Paris"), runner.commands)
+            self.assertEqual(
+                installer.paths.compose_env.read_text(encoding="utf-8"), "GLADYS_TZ=Europe/Paris\n"
+            )
+
+    def test_time_zone_already_chosen_on_the_host_is_kept(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runner = TimezoneRunner(host_timezone="Europe/Berlin")
+            installer = self.make_installer(directory, runner)
+            installer.timezone_detector = mock.Mock(return_value="Europe/Paris")
+
+            installer.configure_timezone()
+
+            installer.timezone_detector.assert_not_called()
+            self.assertNotIn("set-timezone", [command[1] for command in runner.commands])
+            self.assertEqual(
+                installer.paths.compose_env.read_text(encoding="utf-8"), "GLADYS_TZ=Europe/Berlin\n"
+            )
+
+    def test_undetected_unknown_or_unsettable_time_zone_keeps_utc(self) -> None:
+        cases = {
+            "no answer": (TimezoneRunner(), None),
+            "unknown zone": (TimezoneRunner(), "Mars/Olympus_Mons"),
+            "injected value": (TimezoneRunner(), "Europe/Paris\nEVIL=1"),
+            "timedatectl failure": (TimezoneRunner(fail=True), "Europe/Paris"),
+        }
+        for name, (runner, detected) in cases.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
+                installer = self.make_installer(directory, runner)
+                installer.timezone_detector = lambda: detected
+
+                installer.configure_timezone()
+
+                self.assertNotIn("set-timezone", [command[1] for command in runner.commands])
+                self.assertEqual(
+                    installer.paths.compose_env.read_text(encoding="utf-8"), "GLADYS_TZ=UTC\n"
+                )
+
+    def test_time_zone_is_configured_before_gladys_starts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runner = TimezoneRunner()
+            installer = self.make_installer(directory, runner)
+
+            self.assertEqual(installer.run(), 0)
+
+            set_timezone = runner.commands.index(("timedatectl", "set-timezone", "Europe/Paris"))
+            start_gladys = runner.commands.index(
+                ("docker", "compose", "-f", str(installer.paths.compose), "up", "-d", "gladys")
+            )
+            self.assertLess(set_timezone, start_gladys)
 
     def test_administrators_join_the_docker_group(self) -> None:
         for administrators in ([], ["operator"], ["operator", "second"]):

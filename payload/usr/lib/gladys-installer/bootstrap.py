@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import platform
+import re
 import socket
 import subprocess
 import sys
@@ -46,6 +47,8 @@ APT_OPTIONS = (
 APT_UPDATE_TIMEOUT = 600
 PACKAGE_OPERATION_TIMEOUT = 3600
 CONTAINER_PULL_TIMEOUT = 3600
+DEFAULT_TIMEZONES = {"", "UTC", "Etc/UTC"}
+TIMEZONE_NAME = re.compile(r"[A-Za-z0-9_+-]+(?:/[A-Za-z0-9_+-]+)*")
 
 T = TypeVar("T")
 COMMAND_FAILURES = (common.CommandError, OSError, subprocess.TimeoutExpired)
@@ -57,6 +60,8 @@ class InstallerPaths:
     completed: Path = Path("/var/lib/gladys-installer/completed")
     lock: Path = Path("/run/gladys-installer/bootstrap.lock")
     compose: Path = Path("/opt/gladys/compose.yaml")
+    # Compose reads it next to compose.yaml for the Gladys time zone.
+    compose_env: Path = Path("/opt/gladys/.env")
     version: Path = Path("/etc/gladys-installer/version")
     data: Path = Path("/var/lib/gladysassistant")
     test_mode: Path = Path("/etc/gladys-installer/test-mode")
@@ -131,6 +136,7 @@ class Bootstrap:
         port_checker: Callable[[], bool] | None = None,
         machine: Callable[[], str] = platform.machine,
         administrators: Callable[[], list[str]] = administrator_accounts,
+        timezone_detector: Callable[[], str | None] = common.geoip_timezone,
     ) -> None:
         self.paths = paths
         self.runner = runner
@@ -140,6 +146,7 @@ class Bootstrap:
         self.port_checker = port_checker or self._port_80_available
         self.machine = machine
         self.administrators = administrators
+        self.timezone_detector = timezone_detector
         self.test_config: dict[str, object] | None = None
 
     @property
@@ -216,6 +223,39 @@ class Bootstrap:
             delay = next(delays)
             LOG.info("Internet unavailable; retrying in %ss", delay)
             self.sleep(delay)
+
+    def _host_timezone(self) -> str:
+        try:
+            result = self.runner(
+                ["timedatectl", "show", "--property=Timezone", "--value"], timeout=30
+            )
+        except COMMAND_FAILURES:
+            return ""
+        return result.stdout.strip()
+
+    def configure_timezone(self) -> None:
+        """Detect the time zone once online and hand it to the Gladys container.
+
+        The Ubuntu Server installer has no time zone screen and installs UTC.
+        A zone chosen on the host before first boot is kept, and any failure
+        keeps UTC: the zone never blocks provisioning.
+        """
+        timezone = self._host_timezone()
+        if timezone in DEFAULT_TIMEZONES:
+            detected = self.timezone_detector()
+            try:
+                known = self.runner(["timedatectl", "list-timezones"], timeout=30).stdout.split()
+                if detected and detected in known:
+                    self.runner(["timedatectl", "set-timezone", detected], timeout=30)
+                    timezone = detected
+                else:
+                    LOG.warning("Time zone not detected (%r); keeping UTC", detected)
+            except COMMAND_FAILURES:
+                LOG.warning("Unable to set the detected time zone; keeping UTC", exc_info=True)
+        if timezone in DEFAULT_TIMEZONES or not TIMEZONE_NAME.fullmatch(timezone):
+            timezone = "UTC"
+        LOG.info("Gladys time zone: %s", timezone)
+        common.atomic_write_text(self.paths.compose_env, f"GLADYS_TZ={timezone}\n")
 
     def apt_update(self) -> None:
         environment = dict(os.environ)
@@ -457,6 +497,7 @@ class Bootstrap:
         self.state(common.Phase.WAIT_NETWORK, "Waiting for an Ethernet Internet connection…")
         self.wait_for_internet()
         self.state(common.Phase.APT_UPDATE, "Refreshing Ubuntu package information…")
+        self.configure_timezone()
         self.apt_update()
         self.state(common.Phase.INSTALL_PACKAGES, "Installing Docker and system services…")
         self.install_packages()

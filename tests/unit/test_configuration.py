@@ -148,6 +148,8 @@ class ComposeConfigurationTests(unittest.TestCase):
         self.assertEqual(gladys["cgroup"], "host")
         self.assertIn("/var/lib/gladysassistant:/var/lib/gladysassistant", gladys["volumes"])
         self.assertIsNone(re.search(r"gladysassistant/gladys:v5\.\d", text))
+        # First boot writes the detected zone to the .env file next to it.
+        self.assertEqual(gladys["environment"]["TZ"], "${GLADYS_TZ:-UTC}")
 
     def test_watchtower_updates_only_gladys_and_itself(self) -> None:
         compose = yaml.safe_load(

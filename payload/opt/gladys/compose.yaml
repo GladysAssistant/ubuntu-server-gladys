@@ -16,7 +16,8 @@ services:
       NODE_ENV: production
       SQLITE_FILE_PATH: /var/lib/gladysassistant/gladys-production.db
       SERVER_PORT: "80"
-      TZ: UTC
+      # First boot writes the detected zone to /opt/gladys/.env.
+      TZ: ${GLADYS_TZ:-UTC}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/lib/gladysassistant:/var/lib/gladysassistant

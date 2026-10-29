@@ -28,7 +28,8 @@ The only content removed from the Canonical image is `/pool/restricted`, about 9
 
 Subiquity installs a normal Ubuntu Server target from the minimized source. Production media present the locale, keyboard, storage, identity, and SSH screens in the normal installer order, with English locale preselected, the keyboard layout suggested from the chosen language, and the OpenSSH server selected by default. The storage screen is skipped on machines with a single internal disk (see below). The CI Autoinstall document differs only in that interactivity and in a throwaway CI account that answers the identity screen. The result is deliberately spartan:
 
-- Timezone is UTC and the hostname is `gladys`, whatever server name is typed on the identity screen.
+- The hostname is `gladys`, whatever server name is typed on the identity screen.
+- The Ubuntu Server installer has no time zone screen, so the system installs in UTC. Once online, first boot asks `geoip.ubuntu.com`, the geolocation service the Ubuntu installer itself queries, for the time zone of the public IP address, applies it with `timedatectl`, and writes it as `GLADYS_TZ` to `/opt/gladys/.env`, which Compose reads for the Gladys `TZ` variable. A zone already set on the host is kept, and any failure leaves UTC without blocking provisioning.
 - The operator creates their own administrator account on the identity screen. The OpenSSH server is installed unless the operator unchecks it on the SSH screen, and password authentication follows Ubuntu Server's standard behavior. Root stays locked and the ISO embeds no account or password.
 - Only security updates are enabled; automatic reboot and release upgrades are disabled.
 
