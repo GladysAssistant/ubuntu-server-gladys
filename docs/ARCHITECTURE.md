@@ -26,7 +26,7 @@ The only content removed from the Canonical image is `/pool/restricted`, about 9
 
 ## Installed appliance
 
-Subiquity installs a normal Ubuntu Server target from the minimized source. Production media present the locale, keyboard, storage, identity, and SSH screens in the normal installer order, with French locale and French AZERTY keyboard preselected and the OpenSSH server selected by default; the CI Autoinstall document differs only in that interactivity and in a throwaway CI account that answers the identity screen. The result is deliberately spartan:
+Subiquity installs a normal Ubuntu Server target from the minimized source. Production media present the locale, keyboard, storage, identity, and SSH screens in the normal installer order, with English locale and US QWERTY keyboard preselected and the OpenSSH server selected by default; the CI Autoinstall document differs only in that interactivity and in a throwaway CI account that answers the identity screen. The result is deliberately spartan:
 
 - Timezone is UTC and the hostname is `gladys`, whatever server name is typed on the identity screen.
 - The operator creates their own administrator account on the identity screen. The OpenSSH server is installed unless the operator unchecks it on the SSH screen, and password authentication follows Ubuntu Server's standard behavior. Root stays locked and the ISO embeds no account or password.

@@ -39,10 +39,10 @@ def _safety_checks(config: dict) -> None:
         raise ConfigurationError(
             "production must make locale, keyboard, storage, identity, and ssh interactive"
         )
-    if config.get("locale") != "fr_FR.UTF-8":
-        raise ConfigurationError("production locale default must be French")
-    if config.get("keyboard", {}).get("layout") != "fr":
-        raise ConfigurationError("production keyboard default must be French AZERTY")
+    if config.get("locale") != "en_US.UTF-8":
+        raise ConfigurationError("production locale default must be English")
+    if config.get("keyboard", {}).get("layout") != "us":
+        raise ConfigurationError("production keyboard default must be US QWERTY")
     if config.get("source", {}).get("id") != "ubuntu-server-minimal":
         raise ConfigurationError("production must select ubuntu-server-minimal")
     if config.get("storage", {}).get("layout", {}).get("name") != "direct":

@@ -1038,7 +1038,7 @@ class AutoinstallValidatorTests(unittest.TestCase):
                 catalog,
             )
 
-    def test_validator_enforces_french_language_and_keyboard_defaults(self) -> None:
+    def test_validator_enforces_english_language_and_keyboard_defaults(self) -> None:
         production_source = (
             ROOT / "autoinstall" / "autoinstall.yaml"
         ).read_text(encoding="utf-8")
@@ -1046,8 +1046,8 @@ class AutoinstallValidatorTests(unittest.TestCase):
             encoding="utf-8"
         )
         for original, invalid in (
-            ("locale: fr_FR.UTF-8", "locale: en_US.UTF-8"),
-            ("layout: fr", "layout: us"),
+            ("locale: en_US.UTF-8", "locale: fr_FR.UTF-8"),
+            ("layout: us", "layout: fr"),
         ):
             with self.subTest(invalid=invalid), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)

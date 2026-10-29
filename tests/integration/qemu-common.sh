@@ -420,7 +420,7 @@ PY
 assert_installer_language() {
 	local disk="$1" language
 	language="$(virt-cat -a "$disk" /etc/gladys-installer/language)"
-	[[ "$language" == "fr_FR.UTF-8" ]] || {
+	[[ "$language" == "en_US.UTF-8" ]] || {
 		printf 'Installer language not recorded: %s\n' "$language" >&2
 		return 1
 	}

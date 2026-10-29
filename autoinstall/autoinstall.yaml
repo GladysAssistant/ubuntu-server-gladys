@@ -6,9 +6,9 @@ autoinstall:
     - storage
     - identity
     - ssh
-  locale: fr_FR.UTF-8
+  locale: en_US.UTF-8
   keyboard:
-    layout: fr
+    layout: us
   timezone: Etc/UTC
   source:
     id: ubuntu-server-minimal
