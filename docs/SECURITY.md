@@ -42,7 +42,7 @@ GitHub Actions defaults to `contents: read`. External actions are pinned to immu
 
 ## Installed system controls
 
-- Production requires the user to select and confirm storage. Only disposable CI media select storage automatically.
+- Production never erases a disk before the user confirms Subiquity's destructive-action dialog. It selects the disk automatically only when exactly one internal disk exists (USB, removable, hot-plugged, read-only, virtual, mounted, and small disks never count), and otherwise asks the user to pick it on the storage screen. Only disposable CI media install without any confirmation.
 - Root is locked and no known account or password exists: the only account is the one the operator creates interactively on the identity screen. Unattended CI media use a throwaway account instead; they are never published, and production validation and ISO inspection reject any embedded identity.
 - The OpenSSH server is selected by default so that the appliance can be maintained without a screen. As on a standard Ubuntu Server, it accepts the operator's password unless keys are imported on the SSH screen. Password login over the local network is an accepted risk; operators who do not want it can uncheck the server or import keys.
 - TLS certificate verification remains enabled everywhere. Internet readiness combines DNS and verified TLS rather than ICMP alone.
