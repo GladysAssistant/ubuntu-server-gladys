@@ -15,7 +15,7 @@ The primary threats this project defends against are:
 
 The project does not defend against a malicious firmware or UEFI implementation, physical access after installation, compromise of Canonical's signing key, compromise of a published container image behind its trusted registry channel, or vulnerabilities inside Ubuntu, Docker, Gladys, or Watchtower.
 
-Gladys intentionally runs privileged, with host networking, device access, and the Docker socket, because that is part of its hardware integration contract. A Gladys compromise must therefore be treated as a host compromise. This boundary is deliberate and documented rather than mitigated.
+Gladys intentionally runs privileged, with host networking, device access, the host D-Bus socket, and the Docker socket, because that is part of its hardware integration contract. A Gladys compromise must therefore be treated as a host compromise. This boundary is deliberate and documented rather than mitigated.
 
 ## Supply chain
 

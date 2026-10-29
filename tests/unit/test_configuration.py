@@ -147,6 +147,8 @@ class ComposeConfigurationTests(unittest.TestCase):
         self.assertEqual(gladys["network_mode"], "host")
         self.assertEqual(gladys["cgroup"], "host")
         self.assertIn("/var/lib/gladysassistant:/var/lib/gladysassistant", gladys["volumes"])
+        self.assertIn("/run/udev:/run/udev:ro", gladys["volumes"])
+        self.assertIn("/run/dbus:/run/dbus:ro", gladys["volumes"])
         self.assertIsNone(re.search(r"gladysassistant/gladys:v5\.\d", text))
         # First boot writes the detected zone to the .env file next to it.
         self.assertEqual(gladys["environment"]["TZ"], "${GLADYS_TZ:-UTC}")

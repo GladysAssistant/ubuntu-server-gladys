@@ -23,6 +23,7 @@ services:
       - /var/lib/gladysassistant:/var/lib/gladysassistant
       - /dev:/dev
       - /run/udev:/run/udev:ro
+      - /run/dbus:/run/dbus:ro
 
   watchtower:
     image: nickfedor/watchtower
