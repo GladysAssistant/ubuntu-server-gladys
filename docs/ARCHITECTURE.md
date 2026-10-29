@@ -26,11 +26,13 @@ The only content removed from the Canonical image is `/pool/restricted`, about 9
 
 ## Installed appliance
 
-Subiquity installs a normal Ubuntu Server target from the minimized source. Production media present the locale, keyboard, storage, identity, and SSH screens in the normal installer order, with English locale preselected, the keyboard layout suggested from the chosen language, and the OpenSSH server selected by default; the CI Autoinstall document differs only in that interactivity and in a throwaway CI account that answers the identity screen. The result is deliberately spartan:
+Subiquity installs a normal Ubuntu Server target from the minimized source. Production media present the locale, keyboard, storage, identity, and SSH screens in the normal installer order, with English locale preselected, the keyboard layout suggested from the chosen language, and the OpenSSH server selected by default. The storage screen is skipped on machines with a single internal disk (see below). The CI Autoinstall document differs only in that interactivity and in a throwaway CI account that answers the identity screen. The result is deliberately spartan:
 
 - Timezone is UTC and the hostname is `gladys`, whatever server name is typed on the identity screen.
 - The operator creates their own administrator account on the identity screen. The OpenSSH server is installed unless the operator unchecks it on the SSH screen, and password authentication follows Ubuntu Server's standard behavior. Root stays locked and the ISO embeds no account or password.
 - Only security updates are enabled; automatic reboot and release upgrades are disabled.
+
+An Autoinstall early command, `/gladys/single-disk-storage.py` on the media, runs before the first screen. It counts the internal disks with `lsblk`, ignoring USB, removable, hot-plugged, read-only, virtual, mounted, and smaller than 16 GiB devices. When exactly one remains, it removes `storage` from the interactive sections of `/autoinstall.yaml` and matches that disk by path; Subiquity reloads the document after early commands, so it installs there with the unencrypted LVM layout, the same default the storage screen offers. The other sections stay interactive, so Subiquity still shows its destructive-action confirmation, right after the keyboard screen, before writing to any disk. Any other disk count, or any error, keeps the storage screen, and the command never fails the installation.
 
 Autoinstall late commands verify the payload SHA256 before extraction, extract it into the target with numeric ownership, enforce root ownership and explicit permissions, install the version file, enable the three Gladys systemd units, and mask the tty1 getty so the status console owns that terminal.
 

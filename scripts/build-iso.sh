@@ -128,6 +128,7 @@ xorriso -indev "$base_iso" -outdev "$output_temporary" \
 	-map "$payload_dir/gladys-payload.tar" /gladys/gladys-payload.tar \
 	-map "$payload_dir/gladys-payload.tar.sha256" /gladys/gladys-payload.tar.sha256 \
 	-map "$temporary/build-profile.json" /gladys/build-profile.json \
+	-map "$ROOT_DIR/autoinstall/single-disk-storage.py" /gladys/single-disk-storage.py \
 	-map "$temporary/grub.patched.cfg" /boot/grub/grub.cfg \
 	-map "$temporary/md5sum.patched.txt" /md5sum.txt \
 	-boot_image any replay

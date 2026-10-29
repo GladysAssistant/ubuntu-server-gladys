@@ -31,7 +31,18 @@ class AutoinstallConfigurationTests(unittest.TestCase):
         self.assertEqual(config["locale"], "en_US.UTF-8")
         self.assertNotIn("keyboard", config)
         self.assertEqual(config["source"]["id"], "ubuntu-server-minimal")
-        self.assertEqual(config["storage"]["layout"]["name"], "direct")
+        # LVM, as on the storage screen; the early command only adds the disk.
+        self.assertEqual(config["storage"], {"layout": {"name": "lvm"}})
+        self.assertEqual(
+            config["early-commands"],
+            [
+                [
+                    "sh",
+                    "-c",
+                    "python3 /cdrom/gladys/single-disk-storage.py /autoinstall.yaml || true",
+                ]
+            ],
+        )
         self.assertEqual(config["ssh"], {"install-server": True})
         # The restricted driver pool is pruned from the ISO.
         self.assertEqual(config["drivers"], {"install": False})

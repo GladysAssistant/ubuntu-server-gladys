@@ -2,7 +2,7 @@
 
 A bootable installer that turns an amd64 mini-PC into a dedicated [Gladys Assistant](https://gladysassistant.com) home automation appliance.
 
-The installer is a remastered Ubuntu Server 26.04 LTS image. You flash it to a USB drive, boot the target machine, choose and confirm the internal disk to erase, and connect Ethernet. After the automated installation reboots, the machine installs Docker from Ubuntu packages, pulls the current `gladysassistant/gladys:v5` image, and starts Gladys together with Watchtower. Gladys then advertises its own address at `http://gladysassistant.local`.
+The installer is a remastered Ubuntu Server 26.04 LTS image. You flash it to a USB drive, boot the target machine, confirm the erasure of its internal disk, and connect Ethernet. After the automated installation reboots, the machine installs Docker from Ubuntu packages, pulls the current `gladysassistant/gladys:v5` image, and starts Gladys together with Watchtower. Gladys then advertises its own address at `http://gladysassistant.local`.
 
 ## At a glance
 
@@ -29,7 +29,7 @@ The ISO never embeds a numbered Gladys release, a container image, a known passw
 3. Flash the ISO to a USB drive with a raw image writer such as balenaEtcher or `dd`.
 4. Boot the target machine in UEFI mode. GRUB shows **Install Gladys Assistant** and starts it automatically after a visible three second timeout.
 5. Choose the installation language and keyboard layout. English is preselected, and the keyboard screen then suggests the layout of the chosen language (French AZERTY for French).
-6. Select the intended internal SSD or NVMe and explicitly confirm its erasure. Production media never select or erase a disk unattended.
+6. Storage depends on the machine. With a single internal disk (SSD, NVMe, or eMMC; USB drives and disks smaller than 16 GiB do not count), the storage screen is skipped and Gladys is installed on that disk with Ubuntu's standard LVM layout. With several internal disks, the storage screen asks which one to use; keep **Use an entire disk**, pick the disk, and leave the LVM option as it is. In both cases nothing is erased before you choose **Continue** in the **Confirm destructive action** dialog, shown just before the account screen.
 7. Create your administrator account (name, username, password). The installer also asks for a server name, but the machine is always named `gladys`. On the next screen the OpenSSH server is selected by default: keep it to log in remotely with your password or with keys imported from GitHub or Launchpad, or uncheck it to keep the appliance without remote shell access. The ISO ships no account or password of its own.
 8. Let the installation finish, remove the USB drive, and leave Ethernet connected.
 9. Follow the progress on the tty1 console or on the setup web page. Before Gladys starts, the console shows the IPv4 address of the setup page.

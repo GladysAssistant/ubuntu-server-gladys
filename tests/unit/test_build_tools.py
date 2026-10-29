@@ -1038,7 +1038,7 @@ class AutoinstallValidatorTests(unittest.TestCase):
                 catalog,
             )
 
-    def test_validator_enforces_english_language_and_no_keyboard_preset(self) -> None:
+    def test_validator_enforces_language_keyboard_and_storage_defaults(self) -> None:
         production_source = (
             ROOT / "autoinstall" / "autoinstall.yaml"
         ).read_text(encoding="utf-8")
@@ -1051,6 +1051,10 @@ class AutoinstallValidatorTests(unittest.TestCase):
                 "  locale: en_US.UTF-8\n",
                 "  locale: en_US.UTF-8\n  keyboard:\n    layout: us\n",
             ),
+            ("      name: lvm\n", "      name: direct\n"),
+            ("      name: lvm\n", "      name: lvm\n      match:\n        size: largest\n"),
+            ("      name: lvm\n", "      name: lvm\n      password: gladys\n"),
+            ("/autoinstall.yaml || true", "/autoinstall.yaml"),
         ):
             with self.subTest(invalid=invalid), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -1219,6 +1223,10 @@ class BuildContractTests(unittest.TestCase):
         (root / "VERSION").write_text("1.0.0\n", encoding="utf-8")
         (autoinstall / "autoinstall.yaml").write_text(
             "autoinstall:\n  version: 1\n", encoding="utf-8"
+        )
+        shutil.copyfile(
+            ROOT / "autoinstall" / "single-disk-storage.py",
+            autoinstall / "single-disk-storage.py",
         )
 
         base_iso = root / "ubuntu.iso"
@@ -1442,6 +1450,7 @@ class BuildContractTests(unittest.TestCase):
                         "/gladys/gladys-payload.tar",
                         "/gladys/gladys-payload.tar.sha256",
                         "/gladys/build-profile.json",
+                        "/gladys/single-disk-storage.py",
                         "/boot/grub/grub.cfg",
                         "/md5sum.txt",
                     ]
