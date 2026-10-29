@@ -256,7 +256,7 @@ class BootstrapTests(unittest.TestCase):
                 runner = runner_class()
                 installer = self.make_installer(directory, runner)
                 installer.paths.motd.mkdir()
-                for name in ("00-header", "10-help-text", "91-contract-ua-esm-status"):
+                for name in ("00-header", "10-help-text", "60-unminimize", "91-contract-ua-esm-status"):
                     (installer.paths.motd / name).write_text("#!/bin/sh\n", encoding="utf-8")
                 installer.paths.motd_news_cache.write_text("Ubuntu news\n", encoding="utf-8")
 
@@ -267,6 +267,7 @@ class BootstrapTests(unittest.TestCase):
                     sorted(set(diverted)),
                     [
                         str(installer.paths.motd / "10-help-text"),
+                        str(installer.paths.motd / "60-unminimize"),
                         str(installer.paths.motd / "91-contract-ua-esm-status"),
                     ],
                 )

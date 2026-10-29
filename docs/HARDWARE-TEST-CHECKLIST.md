@@ -70,7 +70,7 @@ Secure Boot is expected to remain compatible because the Ubuntu signed boot chai
 - [ ] After first boot reaches **Ready** and a fresh login, `docker ps` works without `sudo` or a password.
 - [ ] `timedatectl` and the time shown by Gladys match the local time zone of the test site.
 - [ ] The USB boot menu is white on blue with **Install Gladys Assistant** highlighted, with Secure Boot enabled and disabled.
-- [ ] An SSH login and a Ctrl+Alt+F2 login show the Gladys status instead of Ubuntu's help links and Ubuntu Pro advertising, and the Ctrl+Alt+F2 prompt shows the Gladys address.
+- [ ] An SSH login and a Ctrl+Alt+F2 login show the Gladys status instead of Ubuntu's help links, `unminimize` notice, and Ubuntu Pro advertising, and the Ctrl+Alt+F2 prompt shows the Gladys address.
 - [ ] The setup page follows the selected language; exercise French, English, a third Latin language, Chinese, and one right-to-left language.
 - [ ] tty1 follows supported Latin, Greek, and Cyrillic selections and uses readable English for Arabic, Hebrew, Tibetan, Japanese, and Chinese rather than emitting unusable glyphs.
 - [ ] Long package and container downloads keep a visible activity animation without displaying fabricated byte counts.

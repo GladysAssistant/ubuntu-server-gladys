@@ -14,6 +14,17 @@ import console  # noqa: E402
 
 
 class ConsoleRenderingTests(unittest.TestCase):
+    def test_french_status_says_gladys_is_started(self) -> None:
+        screen = console.render_screen(
+            {"phase": "READY", "progress": 100, "message": "Ready"},
+            ["192.168.1.42"],
+            {"docker": True, "gladys": True, "ethernet": True},
+            language="fr",
+        )
+
+        self.assertIn("Gladys: démarré", screen)
+        self.assertNotIn("en cours", screen)
+
     def test_colours_highlight_the_brand_and_the_ready_line_only(self) -> None:
         screen = console.render_screen(
             {"phase": "READY", "progress": 100, "message": "Ready"},

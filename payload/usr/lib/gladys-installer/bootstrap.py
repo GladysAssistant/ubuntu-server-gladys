@@ -48,9 +48,15 @@ APT_UPDATE_TIMEOUT = 600
 PACKAGE_OPERATION_TIMEOUT = 3600
 CONTAINER_PULL_TIMEOUT = 3600
 DEFAULT_TIMEZONES = {"", "UTC", "Etc/UTC"}
-# Ubuntu login messages replaced by the Gladys status: documentation links and
-# Ubuntu Pro advertising. Missing scripts are skipped.
-UBUNTU_MOTD_SCRIPTS = ("10-help-text", "88-esm-announce", "91-contract-ua-esm-status")
+# Ubuntu login messages replaced by the Gladys status: documentation links,
+# the minimized system notice and Ubuntu Pro advertising. Missing scripts are
+# skipped.
+UBUNTU_MOTD_SCRIPTS = (
+    "10-help-text",
+    "60-unminimize",
+    "88-esm-announce",
+    "91-contract-ua-esm-status",
+)
 TIMEZONE_NAME = re.compile(r"[A-Za-z0-9_+-]+(?:/[A-Za-z0-9_+-]+)*")
 
 T = TypeVar("T")
