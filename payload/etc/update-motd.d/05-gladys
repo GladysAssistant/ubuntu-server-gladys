@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+"""Show the Gladys status at login, in the language chosen in the installer.
+
+pam_motd runs this script as root for SSH and console logins. It prints the
+same screen as the tty1 status console and never blocks a login.
+"""
+
+import sys
+
+sys.path.insert(0, "/usr/lib/gladys-installer")
+
+try:
+    import common
+    import console
+    import i18n
+
+    addresses = common.current_ipv4_addresses()
+    screen = console.render_screen(
+        console.read_state(),
+        addresses,
+        console.service_states(addresses),
+        language=i18n.read_installed_language(),
+    )
+    print(console.colorize(screen))
+    print()
+except Exception:
+    pass

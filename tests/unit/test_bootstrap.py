@@ -73,6 +73,9 @@ class BootstrapTests(unittest.TestCase):
             lock=root / "bootstrap.lock",
             compose=compose,
             compose_env=root / ".env",
+            motd=root / "update-motd.d",
+            motd_disabled=root / "motd-disabled",
+            motd_news_cache=root / "motd-news",
             version=version,
             data=root / "data",
             test_mode=root / "test-mode",
@@ -118,7 +121,9 @@ class BootstrapTests(unittest.TestCase):
             grant_docker = commands.index(("usermod", "--append", "--groups", "docker", "operator"))
             self.assertLess(stop_web, start_gladys)
             self.assertLess(start_gladys, start_watchtower)
+            quiet_news = commands.index(("systemctl", "mask", "--now", "motd-news.timer"))
             self.assertLess(start_watchtower, grant_docker)
+            self.assertLess(grant_docker, quiet_news)
             self.assertTrue(installer.paths.completed.is_file())
             state = json.loads(installer.paths.state.read_text(encoding="utf-8"))
             self.assertEqual((state["phase"], state["progress"]), ("READY", 100))
@@ -237,6 +242,45 @@ class BootstrapTests(unittest.TestCase):
                 ("docker", "compose", "-f", str(installer.paths.compose), "up", "-d", "gladys")
             )
             self.assertLess(set_timezone, start_gladys)
+
+    def test_ubuntu_login_messages_are_diverted_and_news_stopped(self) -> None:
+        class FailingDivertRunner(FakeRunner):
+            def __call__(self, argv: list[str], **kwargs: object) -> common.CommandResult:
+                if argv[0] == "dpkg-divert" and argv[-1].endswith("10-help-text"):
+                    self.commands.append(tuple(argv))
+                    raise OSError("dpkg database locked")
+                return super().__call__(argv, **kwargs)
+
+        for runner_class in (FakeRunner, FailingDivertRunner):
+            with self.subTest(runner=runner_class.__name__), tempfile.TemporaryDirectory() as directory:
+                runner = runner_class()
+                installer = self.make_installer(directory, runner)
+                installer.paths.motd.mkdir()
+                for name in ("00-header", "10-help-text", "91-contract-ua-esm-status"):
+                    (installer.paths.motd / name).write_text("#!/bin/sh\n", encoding="utf-8")
+                installer.paths.motd_news_cache.write_text("Ubuntu news\n", encoding="utf-8")
+
+                installer.quiet_ubuntu_login_messages()
+
+                diverted = [command[-1] for command in runner.commands if command[0] == "dpkg-divert"]
+                self.assertEqual(
+                    sorted(set(diverted)),
+                    [
+                        str(installer.paths.motd / "10-help-text"),
+                        str(installer.paths.motd / "91-contract-ua-esm-status"),
+                    ],
+                )
+                self.assertIn(
+                    (
+                        "dpkg-divert", "--local", "--rename",
+                        "--divert", str(installer.paths.motd_disabled / "91-contract-ua-esm-status"),
+                        "--add", str(installer.paths.motd / "91-contract-ua-esm-status"),
+                    ),
+                    runner.commands,
+                )
+                self.assertIn(("systemctl", "mask", "--now", "motd-news.timer"), runner.commands)
+                self.assertTrue(installer.paths.motd_disabled.is_dir())
+                self.assertFalse(installer.paths.motd_news_cache.exists())
 
     def test_administrators_join_the_docker_group(self) -> None:
         for administrators in ([], ["operator"], ["operator", "second"]):

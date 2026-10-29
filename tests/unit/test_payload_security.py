@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -58,6 +61,39 @@ class UpdateConfigurationTests(unittest.TestCase):
         self.assertIn('Unattended-Upgrade::Automatic-Reboot "false";', unattended)
         self.assertNotIn("-updates", unattended)
         self.assertEqual(release.strip(), "[DEFAULT]\nPrompt=never")
+
+
+class LoginMessageTests(unittest.TestCase):
+    MOTD = PAYLOAD / "etc" / "update-motd.d" / "05-gladys"
+
+    def _run_motd(self, runtime: str) -> subprocess.CompletedProcess[str]:
+        source = self.MOTD.read_text(encoding="utf-8").replace("/usr/lib/gladys-installer", runtime)
+        with tempfile.TemporaryDirectory() as directory:
+            script = Path(directory) / "05-gladys"
+            script.write_text(source, encoding="utf-8")
+            return subprocess.run(
+                [sys.executable, "-I", str(script)], capture_output=True, text=True, timeout=60
+            )
+
+    def test_login_message_shows_the_gladys_status(self) -> None:
+        result = self._run_motd(str(PAYLOAD / "usr" / "lib" / "gladys-installer"))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("\x1b[1;34mGladys Assistant\x1b[0m", result.stdout)
+        self.assertNotIn("Ubuntu", result.stdout)
+
+    def test_login_message_never_blocks_a_login(self) -> None:
+        with tempfile.TemporaryDirectory() as missing:
+            result = self._run_motd(missing)
+
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
+
+    def test_console_banner_names_gladys_and_its_addresses(self) -> None:
+        banner = (PAYLOAD / "etc" / "issue.d" / "gladys.issue").read_text(encoding="utf-8")
+
+        self.assertIn("http://gladysassistant.local", banner)
+        # agetty expands \4 to the IPv4 address of the first configured interface.
+        self.assertIn("http://\\4", banner)
 
 
 class DiagnosticsTests(unittest.TestCase):

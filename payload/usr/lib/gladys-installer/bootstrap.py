@@ -48,6 +48,9 @@ APT_UPDATE_TIMEOUT = 600
 PACKAGE_OPERATION_TIMEOUT = 3600
 CONTAINER_PULL_TIMEOUT = 3600
 DEFAULT_TIMEZONES = {"", "UTC", "Etc/UTC"}
+# Ubuntu login messages replaced by the Gladys status: documentation links and
+# Ubuntu Pro advertising. Missing scripts are skipped.
+UBUNTU_MOTD_SCRIPTS = ("10-help-text", "88-esm-announce", "91-contract-ua-esm-status")
 TIMEZONE_NAME = re.compile(r"[A-Za-z0-9_+-]+(?:/[A-Za-z0-9_+-]+)*")
 
 T = TypeVar("T")
@@ -62,6 +65,9 @@ class InstallerPaths:
     compose: Path = Path("/opt/gladys/compose.yaml")
     # Compose reads it next to compose.yaml for the Gladys time zone.
     compose_env: Path = Path("/opt/gladys/.env")
+    motd: Path = Path("/etc/update-motd.d")
+    motd_disabled: Path = Path("/etc/gladys-installer/motd-disabled")
+    motd_news_cache: Path = Path("/var/cache/motd-news")
     version: Path = Path("/etc/gladys-installer/version")
     data: Path = Path("/var/lib/gladysassistant")
     test_mode: Path = Path("/etc/gladys-installer/test-mode")
@@ -355,6 +361,35 @@ class Bootstrap:
                 ["usermod", "--append", "--groups", "docker", account], timeout=60
             )
 
+    def quiet_ubuntu_login_messages(self) -> None:
+        """Leave the Gladys status as the main login message.
+
+        dpkg-divert moves the scripts aside so package updates keep them
+        there, without the conffile edits that stop unattended upgrades.
+        Masking motd-news.timer also stops its daily request to Ubuntu.
+        """
+        self.paths.motd_disabled.mkdir(parents=True, exist_ok=True)
+        commands = [
+            [
+                "dpkg-divert", "--local", "--rename",
+                "--divert", str(self.paths.motd_disabled / name),
+                "--add", str(self.paths.motd / name),
+            ]
+            for name in UBUNTU_MOTD_SCRIPTS
+            if (self.paths.motd / name).exists()
+        ]
+        commands.append(["systemctl", "mask", "--now", "motd-news.timer"])
+        for command in commands:
+            try:
+                retry_operation(
+                    lambda: self._run_retryable(command, timeout=60),
+                    sleep=self.sleep,
+                    max_attempts=5,
+                )
+            except common.RetryableError:
+                LOG.warning("Unable to quiet an Ubuntu login message: %s", command, exc_info=True)
+        self.paths.motd_news_cache.unlink(missing_ok=True)
+
     def docker_preflight(self) -> None:
         self._retry_command(["docker", "version"], timeout=60)
         self._retry_command(["docker", "compose", "version"], timeout=60)
@@ -515,6 +550,7 @@ class Bootstrap:
         self.start_watchtower()
         self.state(common.Phase.FINALIZE, "Finishing appliance setup…")
         self.grant_docker_access()
+        self.quiet_ubuntu_login_messages()
         retry_operation(self.verify_final, sleep=self.sleep)
         image_id, image_digest = retry_operation(self.image_metadata, sleep=self.sleep)
         self.state(common.Phase.READY, "Gladys Assistant is ready.")

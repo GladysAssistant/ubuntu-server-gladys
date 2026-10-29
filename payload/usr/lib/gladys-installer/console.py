@@ -13,6 +13,10 @@ import i18n
 
 
 STATE_PATH = Path("/var/lib/gladys-installer/state.json")
+# Bold blue is the closest Linux console colour to Gladys blue.
+BRAND_STYLE = "\x1b[1;34m"
+SUCCESS_STYLE = "\x1b[1;32m"
+RESET_STYLE = "\x1b[0m"
 PHASES = [
     "PREFLIGHT",
     "WAIT_NETWORK",
@@ -189,6 +193,17 @@ def render_screen(
     )
 
 
+def colorize(screen: str) -> str:
+    """Show the Gladys name in Gladys blue and the ready line in green."""
+    lines = screen.split("\n")
+    for index, line in enumerate(lines):
+        if index == 0:
+            lines[index] = f"{BRAND_STYLE}{line}{RESET_STYLE}"
+        elif line.startswith("✓ "):
+            lines[index] = f"{SUCCESS_STYLE}{line}{RESET_STYLE}"
+    return "\n".join(lines)
+
+
 def service_states(addresses: list[str]) -> dict[str, bool]:
     def succeeds(argv: list[str]) -> bool:
         try:
@@ -227,7 +242,7 @@ def main() -> int:
             language=language,
             frame=frame,
         )
-        sys.stdout.write("\x1b[2J\x1b[H" + screen + "\n")
+        sys.stdout.write("\x1b[2J\x1b[H" + colorize(screen) + "\n")
         sys.stdout.flush()
         frame += 1
         time.sleep(2)

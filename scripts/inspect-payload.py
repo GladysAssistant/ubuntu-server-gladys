@@ -53,6 +53,7 @@ def inspect_payload(archive: Path, profile: str) -> None:
             if member.isfile() and (
                 name.startswith("usr/lib/gladys-installer/") and name.endswith(".py")
                 or name == "usr/local/sbin/gladys-diagnostics"
+                or name == "etc/update-motd.d/05-gladys"
             ):
                 expected_mode = 0o755
             if member.mode & 0o7777 != expected_mode:

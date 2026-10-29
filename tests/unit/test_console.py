@@ -14,6 +14,26 @@ import console  # noqa: E402
 
 
 class ConsoleRenderingTests(unittest.TestCase):
+    def test_colours_highlight_the_brand_and_the_ready_line_only(self) -> None:
+        screen = console.render_screen(
+            {"phase": "READY", "progress": 100, "message": "Ready"},
+            ["192.168.1.42"],
+            {"docker": True, "gladys": True, "ethernet": True},
+        )
+
+        lines = console.colorize(screen).split("\n")
+
+        self.assertEqual(lines[0], "\x1b[1;34mGladys Assistant\x1b[0m")
+        self.assertIn("\x1b[1;32m✓ Gladys Assistant is ready\x1b[0m", lines)
+        self.assertEqual(
+            [line for line in lines if "\x1b[" in line],
+            [lines[0], "\x1b[1;32m✓ Gladys Assistant is ready\x1b[0m"],
+        )
+        self.assertEqual(
+            console.colorize(screen).replace("\x1b[1;34m", "").replace("\x1b[1;32m", "").replace("\x1b[0m", ""),
+            screen,
+        )
+
     def test_wait_network_screen_recommends_ethernet(self) -> None:
         screen = console.render_screen(
             {"phase": "WAIT_NETWORK", "progress": 5, "message": "Waiting"},

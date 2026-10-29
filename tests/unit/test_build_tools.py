@@ -228,6 +228,14 @@ class GrubPatchTests(unittest.TestCase):
         self.assertEqual(lines.count("set default=0"), 1)
         self.assertEqual(lines.count("set timeout_style=menu"), 1)
         self.assertEqual(lines.count("set timeout=3"), 1)
+        self.assertEqual(
+            lines[-3:],
+            [
+                "set color_normal=white/blue",
+                "set menu_color_normal=white/blue",
+                "set menu_color_highlight=blue/white",
+            ],
+        )
         self.assertIn("menuentry 'UEFI Firmware Settings'", patched)
 
     def test_handles_blank_line_before_canonical_entry(self) -> None:
@@ -278,6 +286,7 @@ class GrubPatchTests(unittest.TestCase):
             ("set default=0", "set default=1"),
             ("set timeout_style=menu", "set timeout_style=hidden"),
             ("set timeout=3", "set timeout=30"),
+            ("set menu_color_highlight=blue/white", "set menu_color_highlight=black/light-gray"),
         ):
             with self.subTest(invalid=invalid), self.assertRaises(
                 patch_grub.GrubPatchError

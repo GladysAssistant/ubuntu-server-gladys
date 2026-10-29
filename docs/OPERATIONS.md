@@ -74,6 +74,8 @@ Log in with the account created during installation — on a virtual console wit
 sudo gladys-diagnostics
 ```
 
+Each login, over SSH or on a virtual console, starts with the same Gladys status as the tty1 console: the Gladys address, the setup progress while first boot runs, and whether Gladys is running.
+
 It uses an allowlist of safe commands and never dumps the Gladys database, container inspection output, environment variables, tokens, or passwords, so its output can be shared in a support request.
 
 The account created during installation can run Docker commands such as `docker ps` or `docker compose -f /opt/gladys/compose.yaml logs gladys` without `sudo` or a password: it joins the `docker` group at the end of first boot, so log in again once after the console shows **Ready**.
