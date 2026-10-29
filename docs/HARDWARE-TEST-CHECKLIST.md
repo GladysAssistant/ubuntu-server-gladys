@@ -21,7 +21,7 @@ For every run, record:
 - [ ] AMD Ryzen class mini-PC installs and reboots.
 - [ ] NVMe target is displayed correctly and installation succeeds.
 - [ ] SATA SSD target is displayed correctly and installation succeeds.
-- [ ] Single internal disk system skips the storage screen, installs on that disk with LVM, and still asks the destructive-action confirmation.
+- [ ] Single internal disk system skips the storage screen, installs on that disk with LVM whose root volume fills the disk (`df -h /`), and still asks the destructive-action confirmation.
 - [ ] Single internal disk system with an additional USB drive plugged in still skips the storage screen and leaves the USB drive untouched.
 - [ ] Multi disk system shows the storage screen with LVM preselected, identifies every disk correctly, and erases only the confirmed target.
 

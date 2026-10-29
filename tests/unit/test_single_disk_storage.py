@@ -118,7 +118,7 @@ class AutoinstallRewriteTests(unittest.TestCase):
         )
         self.assertEqual(
             document["autoinstall"]["storage"],
-            {"layout": {"name": "lvm", "match": {"path": "/dev/nvme0n1"}}},
+            {"layout": {"name": "lvm", "sizing-policy": "all", "match": {"path": "/dev/nvme0n1"}}},
         )
 
     def test_several_or_no_disks_keep_the_storage_screen(self) -> None:

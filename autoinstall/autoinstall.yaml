@@ -13,6 +13,7 @@ autoinstall:
   storage:
     layout:
       name: lvm
+      sizing-policy: all
   ssh:
     install-server: true
   kernel-crash-dumps:

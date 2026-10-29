@@ -32,7 +32,9 @@ class AutoinstallConfigurationTests(unittest.TestCase):
         self.assertNotIn("keyboard", config)
         self.assertEqual(config["source"]["id"], "ubuntu-server-minimal")
         # LVM, as on the storage screen; the early command only adds the disk.
-        self.assertEqual(config["storage"], {"layout": {"name": "lvm"}})
+        self.assertEqual(
+            config["storage"], {"layout": {"name": "lvm", "sizing-policy": "all"}}
+        )
         self.assertEqual(
             config["early-commands"],
             [

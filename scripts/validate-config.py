@@ -55,8 +55,10 @@ def _safety_checks(config: dict) -> None:
         raise ConfigurationError("production must select ubuntu-server-minimal")
     # The early command adds the disk match itself, and only for a single
     # internal disk: production must never preselect a disk or a passphrase.
-    if config.get("storage") != {"layout": {"name": "lvm"}}:
-        raise ConfigurationError("production storage layout must be unencrypted LVM with no disk match")
+    if config.get("storage") != {"layout": {"name": "lvm", "sizing-policy": "all"}}:
+        raise ConfigurationError(
+            "production storage layout must be unencrypted whole-disk LVM with no disk match"
+        )
     if config.get("early-commands") != [SINGLE_DISK_EARLY_COMMAND]:
         raise ConfigurationError("production early commands must only run the single disk storage check")
     if "identity" in config:

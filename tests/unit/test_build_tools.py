@@ -1054,6 +1054,7 @@ class AutoinstallValidatorTests(unittest.TestCase):
             ("      name: lvm\n", "      name: direct\n"),
             ("      name: lvm\n", "      name: lvm\n      match:\n        size: largest\n"),
             ("      name: lvm\n", "      name: lvm\n      password: gladys\n"),
+            ("      sizing-policy: all\n", ""),
             ("/autoinstall.yaml || true", "/autoinstall.yaml"),
         ):
             with self.subTest(invalid=invalid), tempfile.TemporaryDirectory() as directory:
