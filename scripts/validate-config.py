@@ -26,6 +26,16 @@ SINGLE_DISK_EARLY_COMMAND = [
     "-c",
     "python3 /cdrom/gladys/single-disk-storage.py /autoinstall.yaml || true",
 ]
+# Grows the guided root volume, which the storage screen sizes to half the
+# disk, over its whole volume group. Never fails.
+GROW_ROOT_LATE_COMMAND = [
+    "sh",
+    "-c",
+    'lv=$(findmnt -n -o SOURCE /target) && '
+    '[ "$(lvs --noheadings -o lv_name "$lv" 2>/dev/null | tr -d " ")" = ubuntu-lv ] && '
+    '[ "$(lvs --noheadings -o vg_free_count "$lv" | tr -d " ")" -gt 0 ] && '
+    'lvextend --resizefs -l +100%FREE "$lv" || true',
+]
 
 
 def _load(path: Path) -> dict:
@@ -75,6 +85,8 @@ def _safety_checks(config: dict) -> None:
     if "ssh_pwauth" in user_data:
         raise ConfigurationError("SSH password authentication must follow the SSH screen")
     commands = config.get("late-commands", [])
+    if GROW_ROOT_LATE_COMMAND not in commands:
+        raise ConfigurationError("late commands must grow the root volume over its volume group")
     rendered = "\n".join(
         command if isinstance(command, str) else " ".join(command) for command in commands
     )

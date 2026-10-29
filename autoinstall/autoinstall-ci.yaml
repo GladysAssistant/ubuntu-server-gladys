@@ -35,6 +35,9 @@ autoinstall:
   early-commands:
     - [sh, -c, "python3 /cdrom/gladys/single-disk-storage.py /autoinstall.yaml || true"]
   late-commands:
+    # The storage screen sizes the guided root volume to half the disk, at
+    # most 100 GiB: grow it over the rest of its volume group. Never fails.
+    - [sh, -c, 'lv=$(findmnt -n -o SOURCE /target) && [ "$(lvs --noheadings -o lv_name "$lv" 2>/dev/null | tr -d " ")" = ubuntu-lv ] && [ "$(lvs --noheadings -o vg_free_count "$lv" | tr -d " ")" -gt 0 ] && lvextend --resizefs -l +100%FREE "$lv" || true']
     - [sh, -c, "cd /cdrom/gladys && sha256sum -c gladys-payload.tar.sha256"]
     - [sh, -c, "tar --extract --file=/cdrom/gladys/gladys-payload.tar --directory=/target --numeric-owner --same-permissions"]
     - [sh, -c, "chown -R 0:0 /target/usr/lib/gladys-installer /target/usr/share/gladys-installer /target/opt/gladys /target/etc/gladys-installer /target/var/lib/gladys-installer"]

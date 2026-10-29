@@ -1056,6 +1056,7 @@ class AutoinstallValidatorTests(unittest.TestCase):
             ("      name: lvm\n", "      name: lvm\n      password: gladys\n"),
             ("      sizing-policy: all\n", ""),
             ("/autoinstall.yaml || true", "/autoinstall.yaml"),
+            ("lvextend --resizefs -l +100%FREE", "lvextend --resizefs -l +50%FREE"),
         ):
             with self.subTest(invalid=invalid), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
