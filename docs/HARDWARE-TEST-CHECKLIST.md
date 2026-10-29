@@ -62,7 +62,7 @@ Secure Boot is expected to remain compatible because the Ubuntu signed boot chai
 ## Usability
 
 - [ ] The language screen appears first with English selected; choosing another language localizes the remaining supported Subiquity screens after confirmation.
-- [ ] The keyboard screen appears before storage with US QWERTY selected and accepts another layout such as French AZERTY.
+- [ ] The keyboard screen appears before storage with the layout of the chosen language suggested; after choosing French AZERTY, typing on the next screens produces AZERTY characters.
 - [ ] A non-technical tester can identify the destructive disk confirmation.
 - [ ] The identity screen requires creating an account and the SSH screen presents the OpenSSH server selected by default.
 - [ ] The machine is named `gladys` after installation, whatever server name was typed on the identity screen.

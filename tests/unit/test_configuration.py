@@ -29,7 +29,7 @@ class AutoinstallConfigurationTests(unittest.TestCase):
             ["locale", "keyboard", "storage", "identity", "ssh"],
         )
         self.assertEqual(config["locale"], "en_US.UTF-8")
-        self.assertEqual(config["keyboard"], {"layout": "us"})
+        self.assertNotIn("keyboard", config)
         self.assertEqual(config["source"]["id"], "ubuntu-server-minimal")
         self.assertEqual(config["storage"]["layout"]["name"], "direct")
         self.assertEqual(config["ssh"], {"install-server": True})

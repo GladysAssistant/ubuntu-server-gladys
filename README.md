@@ -28,7 +28,7 @@ The ISO never embeds a numbered Gladys release, a container image, a known passw
 2. Verify its checksum and, when available, the GitHub artifact attestation as described in [docs/RELEASE.md](docs/RELEASE.md).
 3. Flash the ISO to a USB drive with a raw image writer such as balenaEtcher or `dd`.
 4. Boot the target machine in UEFI mode. GRUB shows **Install Gladys Assistant** and starts it automatically after a visible three second timeout.
-5. Choose the installation language and keyboard layout. English and the US QWERTY layout are preselected.
+5. Choose the installation language and keyboard layout. English is preselected, and the keyboard screen then suggests the layout of the chosen language (French AZERTY for French).
 6. Select the intended internal SSD or NVMe and explicitly confirm its erasure. Production media never select or erase a disk unattended.
 7. Create your administrator account (name, username, password). The installer also asks for a server name, but the machine is always named `gladys`. On the next screen the OpenSSH server is selected by default: keep it to log in remotely with your password or with keys imported from GitHub or Launchpad, or uncheck it to keep the appliance without remote shell access. The ISO ships no account or password of its own.
 8. Let the installation finish, remove the USB drive, and leave Ethernet connected.

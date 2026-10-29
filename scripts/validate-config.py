@@ -41,8 +41,10 @@ def _safety_checks(config: dict) -> None:
         )
     if config.get("locale") != "en_US.UTF-8":
         raise ConfigurationError("production locale default must be English")
-    if config.get("keyboard", {}).get("layout") != "us":
-        raise ConfigurationError("production keyboard default must be US QWERTY")
+    # Subiquity applies an interactive keyboard choice only when it differs
+    # from the Autoinstall value, so a preset layout could never be loaded.
+    if "keyboard" in config:
+        raise ConfigurationError("production must leave the keyboard to the interactive screen")
     if config.get("source", {}).get("id") != "ubuntu-server-minimal":
         raise ConfigurationError("production must select ubuntu-server-minimal")
     if config.get("storage", {}).get("layout", {}).get("name") != "direct":

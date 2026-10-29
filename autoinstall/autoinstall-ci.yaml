@@ -8,8 +8,6 @@ autoinstall:
     username: gladys-ci
     password: "$6$gladysci$XGVxe661m5jd9kCAtb1W.PeSdgOtp7Iz8.0JsgCPRKdB8juiJAPTZ2y5pTyM6EyfthhAQj1cvSrZ3021QYq.S/"
   locale: en_US.UTF-8
-  keyboard:
-    layout: us
   timezone: Etc/UTC
   source:
     id: ubuntu-server-minimal

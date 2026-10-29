@@ -7,8 +7,6 @@ autoinstall:
     - identity
     - ssh
   locale: en_US.UTF-8
-  keyboard:
-    layout: us
   timezone: Etc/UTC
   source:
     id: ubuntu-server-minimal
