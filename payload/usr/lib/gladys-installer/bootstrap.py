@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import platform
+import re
 import socket
 import subprocess
 import sys
@@ -17,8 +18,10 @@ from typing import Callable, TypeVar
 
 try:
     import fcntl
+    import grp
+    import pwd
 except ImportError:  # pragma: no cover - the installed appliance is Linux-only
-    fcntl = None  # type: ignore[assignment]
+    fcntl = grp = pwd = None  # type: ignore[assignment]
 
 import common
 
@@ -44,6 +47,17 @@ APT_OPTIONS = (
 APT_UPDATE_TIMEOUT = 600
 PACKAGE_OPERATION_TIMEOUT = 3600
 CONTAINER_PULL_TIMEOUT = 3600
+DEFAULT_TIMEZONES = {"", "UTC", "Etc/UTC"}
+# Ubuntu login messages replaced by the Gladys status: documentation links,
+# the minimized system notice and Ubuntu Pro advertising. Missing scripts are
+# skipped.
+UBUNTU_MOTD_SCRIPTS = (
+    "10-help-text",
+    "60-unminimize",
+    "88-esm-announce",
+    "91-contract-ua-esm-status",
+)
+TIMEZONE_NAME = re.compile(r"[A-Za-z0-9_+-]+(?:/[A-Za-z0-9_+-]+)*")
 
 T = TypeVar("T")
 COMMAND_FAILURES = (common.CommandError, OSError, subprocess.TimeoutExpired)
@@ -55,6 +69,11 @@ class InstallerPaths:
     completed: Path = Path("/var/lib/gladys-installer/completed")
     lock: Path = Path("/run/gladys-installer/bootstrap.lock")
     compose: Path = Path("/opt/gladys/compose.yaml")
+    # Compose reads it next to compose.yaml for the Gladys time zone.
+    compose_env: Path = Path("/opt/gladys/.env")
+    motd: Path = Path("/etc/update-motd.d")
+    motd_disabled: Path = Path("/etc/gladys-installer/motd-disabled")
+    motd_news_cache: Path = Path("/var/cache/motd-news")
     version: Path = Path("/etc/gladys-installer/version")
     data: Path = Path("/var/lib/gladysassistant")
     test_mode: Path = Path("/etc/gladys-installer/test-mode")
@@ -62,6 +81,23 @@ class InstallerPaths:
     ci_barrier_package: Path = Path(
         "/etc/gladys-installer/gladys-ci-dpkg-barrier_1.0_all.deb"
     )
+
+
+def administrator_accounts() -> list[str]:
+    """Return the ordinary accounts in the sudo group, such as the operator's."""
+    try:
+        members = grp.getgrnam("sudo").gr_mem
+    except KeyError:
+        return []
+    accounts = []
+    for member in members:
+        try:
+            uid = pwd.getpwnam(member).pw_uid
+        except KeyError:
+            continue
+        if 1000 <= uid < 65534:
+            accounts.append(member)
+    return accounts
 
 
 def retry_operation(
@@ -111,6 +147,8 @@ class Bootstrap:
         http_checker: Callable[..., bool] = common.http_ready,
         port_checker: Callable[[], bool] | None = None,
         machine: Callable[[], str] = platform.machine,
+        administrators: Callable[[], list[str]] = administrator_accounts,
+        timezone_detector: Callable[[], str | None] = common.geoip_timezone,
     ) -> None:
         self.paths = paths
         self.runner = runner
@@ -119,6 +157,8 @@ class Bootstrap:
         self.http_checker = http_checker
         self.port_checker = port_checker or self._port_80_available
         self.machine = machine
+        self.administrators = administrators
+        self.timezone_detector = timezone_detector
         self.test_config: dict[str, object] | None = None
 
     @property
@@ -195,6 +235,43 @@ class Bootstrap:
             delay = next(delays)
             LOG.info("Internet unavailable; retrying in %ss", delay)
             self.sleep(delay)
+
+    def _host_timezone(self) -> str:
+        try:
+            result = self.runner(
+                ["timedatectl", "show", "--property=Timezone", "--value"], timeout=30
+            )
+        except COMMAND_FAILURES:
+            return ""
+        return result.stdout.strip()
+
+    def configure_timezone(self) -> None:
+        """Detect the time zone once online and hand it to the Gladys container.
+
+        The Ubuntu Server installer has no time zone screen and installs UTC.
+        A zone chosen on the host before first boot is kept, and any failure
+        keeps UTC: the zone never blocks provisioning.
+        """
+        timezone = self._host_timezone()
+        if timezone in DEFAULT_TIMEZONES:
+            try:
+                detected = self.timezone_detector()
+            except Exception:  # a lookup bug must never stop first boot
+                LOG.warning("Time zone lookup failed; keeping UTC", exc_info=True)
+                detected = None
+            try:
+                known = self.runner(["timedatectl", "list-timezones"], timeout=30).stdout.split()
+                if detected and detected in known:
+                    self.runner(["timedatectl", "set-timezone", detected], timeout=30)
+                    timezone = detected
+                else:
+                    LOG.warning("Time zone not detected (%r); keeping UTC", detected)
+            except COMMAND_FAILURES:
+                LOG.warning("Unable to set the detected time zone; keeping UTC", exc_info=True)
+        if timezone in DEFAULT_TIMEZONES or not TIMEZONE_NAME.fullmatch(timezone):
+            timezone = "UTC"
+        LOG.info("Gladys time zone: %s", timezone)
+        common.atomic_write_text(self.paths.compose_env, f"GLADYS_TZ={timezone}\n")
 
     def apt_update(self) -> None:
         environment = dict(os.environ)
@@ -285,6 +362,49 @@ class Bootstrap:
         self._retry_command(
             ["systemctl", "enable", "--now", "docker.service"], timeout=120
         )
+
+    def grant_docker_access(self) -> None:
+        # Docker group membership is root-equivalent, like the sudo the
+        # administrators already hold; it spares them the password for docker.
+        # It is a convenience, so a persistent failure never blocks READY.
+        for account in self.administrators():
+            command = ["usermod", "--append", "--groups", "docker", account]
+            try:
+                retry_operation(
+                    lambda: self._run_retryable(command, timeout=60),
+                    sleep=self.sleep,
+                    max_attempts=5,
+                )
+            except common.RetryableError:
+                LOG.warning("Unable to give %s access to Docker", account, exc_info=True)
+
+    def quiet_ubuntu_login_messages(self) -> None:
+        """Leave the Gladys status as the main login message.
+
+        dpkg-divert moves the scripts aside so package updates keep them
+        there, without the conffile edits that stop unattended upgrades.
+        Masking motd-news.timer also stops its daily request to Ubuntu.
+        Each command runs once: dpkg-divert fails at once while unattended
+        upgrades hold the dpkg lock, and waiting would only delay READY for
+        a cosmetic change. A later boot before READY retries what is left.
+        """
+        self.paths.motd_disabled.mkdir(parents=True, exist_ok=True)
+        commands = [
+            [
+                "dpkg-divert", "--local", "--rename",
+                "--divert", str(self.paths.motd_disabled / name),
+                "--add", str(self.paths.motd / name),
+            ]
+            for name in UBUNTU_MOTD_SCRIPTS
+            if (self.paths.motd / name).exists()
+        ]
+        commands.append(["systemctl", "mask", "--now", "motd-news.timer"])
+        for command in commands:
+            try:
+                self.runner(command, timeout=60)
+            except COMMAND_FAILURES:
+                LOG.warning("Unable to quiet an Ubuntu login message: %s", command, exc_info=True)
+        self.paths.motd_news_cache.unlink(missing_ok=True)
 
     def docker_preflight(self) -> None:
         self._retry_command(["docker", "version"], timeout=60)
@@ -428,6 +548,7 @@ class Bootstrap:
         self.state(common.Phase.WAIT_NETWORK, "Waiting for an Ethernet Internet connection…")
         self.wait_for_internet()
         self.state(common.Phase.APT_UPDATE, "Refreshing Ubuntu package information…")
+        self.configure_timezone()
         self.apt_update()
         self.state(common.Phase.INSTALL_PACKAGES, "Installing Docker and system services…")
         self.install_packages()
@@ -444,6 +565,8 @@ class Bootstrap:
         self.state(common.Phase.START_WATCHTOWER, "Enabling Gladys updates…")
         self.start_watchtower()
         self.state(common.Phase.FINALIZE, "Finishing appliance setup…")
+        self.grant_docker_access()
+        self.quiet_ubuntu_login_messages()
         retry_operation(self.verify_final, sleep=self.sleep)
         image_id, image_digest = retry_operation(self.image_metadata, sleep=self.sleep)
         self.state(common.Phase.READY, "Gladys Assistant is ready.")

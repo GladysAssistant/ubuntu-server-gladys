@@ -380,6 +380,7 @@ fi
         self.assertIn("assert_completed_disk", text)
         self.assertIn("assert_operator_account_and_ssh", text)
         self.assertIn("assert_installer_language", text)
+        self.assertIn('assert_gladys_timezone "$DISK"', text)
         self.assertNotIn("sshpass", text)
 
     @unittest.skipIf(

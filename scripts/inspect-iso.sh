@@ -3,6 +3,7 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
 ISO=""
 BASE_ISO=""
 PROFILE="production"
@@ -69,6 +70,7 @@ xorriso -osirrox on -indev "$ISO" \
 	-extract /gladys/gladys-payload.tar "$temporary/custom/gladys/gladys-payload.tar" \
 	-extract /gladys/gladys-payload.tar.sha256 "$temporary/custom/gladys/gladys-payload.tar.sha256" \
 	-extract /gladys/build-profile.json "$temporary/custom/gladys/build-profile.json" \
+	-extract /gladys/single-disk-storage.py "$temporary/custom/gladys/single-disk-storage.py" \
 	-extract /boot/grub/grub.cfg "$temporary/custom/boot/grub/grub.cfg" \
 	-extract /md5sum.txt "$temporary/custom/md5sum.txt" \
 	-extract /EFI/boot/bootx64.efi "$temporary/custom/EFI/boot/bootx64.efi" \
@@ -95,6 +97,11 @@ done
 	cd -- "$temporary/custom/gladys"
 	sha256sum -c --status gladys-payload.tar.sha256
 )
+cmp --silent "$ROOT_DIR/autoinstall/single-disk-storage.py" \
+	"$temporary/custom/gladys/single-disk-storage.py" || {
+	printf 'Single disk storage early command differs from the repository\n' >&2
+	exit 65
+}
 python3 "$SCRIPT_DIR/inspect-payload.py" \
 	--archive "$temporary/custom/gladys/gladys-payload.tar" --profile "$PROFILE"
 python3 "$SCRIPT_DIR/patch-grub.py" --check \

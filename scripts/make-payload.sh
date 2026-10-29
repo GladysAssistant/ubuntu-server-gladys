@@ -88,7 +88,8 @@ fi
 
 find "$overlay" -type d -exec chmod 0755 {} +
 find "$overlay" -type f -exec chmod 0644 {} +
-chmod 0755 "$overlay/usr/lib/gladys-installer/"*.py "$overlay/usr/local/sbin/gladys-diagnostics"
+chmod 0755 "$overlay/usr/lib/gladys-installer/"*.py "$overlay/usr/local/sbin/gladys-diagnostics" \
+	"$overlay/etc/update-motd.d/05-gladys"
 
 archive="$OUTPUT_DIR/gladys-payload.tar"
 tar --create --file="$archive" --directory="$overlay" \

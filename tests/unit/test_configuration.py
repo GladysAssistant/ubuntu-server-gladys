@@ -28,10 +28,23 @@ class AutoinstallConfigurationTests(unittest.TestCase):
             config["interactive-sections"],
             ["locale", "keyboard", "storage", "identity", "ssh"],
         )
-        self.assertEqual(config["locale"], "fr_FR.UTF-8")
-        self.assertEqual(config["keyboard"], {"layout": "fr"})
+        self.assertEqual(config["locale"], "en_US.UTF-8")
+        self.assertNotIn("keyboard", config)
         self.assertEqual(config["source"]["id"], "ubuntu-server-minimal")
-        self.assertEqual(config["storage"]["layout"]["name"], "direct")
+        # LVM, as on the storage screen; the early command only adds the disk.
+        self.assertEqual(
+            config["storage"], {"layout": {"name": "lvm", "sizing-policy": "all"}}
+        )
+        self.assertEqual(
+            config["early-commands"],
+            [
+                [
+                    "sh",
+                    "-c",
+                    "python3 /cdrom/gladys/single-disk-storage.py /autoinstall.yaml || true",
+                ]
+            ],
+        )
         self.assertEqual(config["ssh"], {"install-server": True})
         # The restricted driver pool is pruned from the ISO.
         self.assertEqual(config["drivers"], {"install": False})
@@ -67,6 +80,8 @@ class AutoinstallConfigurationTests(unittest.TestCase):
         self.assertLess(verify_at, extract_at)
         self.assertLess(extract_at, rendered.index("> /target/etc/gladys-installer/language"))
         self.assertNotIn("daemon-reload", rendered)
+        # The root volume keeps the size confirmed on the storage screen.
+        self.assertNotIn("lvextend", rendered)
         self.assertIn("systemctl --root=/target enable gladys-firstboot.service", rendered)
         self.assertIn("systemctl --root=/target mask getty@tty1.service", rendered)
 
@@ -88,7 +103,11 @@ class ComposeConfigurationTests(unittest.TestCase):
         self.assertEqual(gladys["network_mode"], "host")
         self.assertEqual(gladys["cgroup"], "host")
         self.assertIn("/var/lib/gladysassistant:/var/lib/gladysassistant", gladys["volumes"])
+        self.assertIn("/run/udev:/run/udev:ro", gladys["volumes"])
+        self.assertIn("/run/dbus:/run/dbus:ro", gladys["volumes"])
         self.assertIsNone(re.search(r"gladysassistant/gladys:v5\.\d", text))
+        # First boot writes the detected zone to the .env file next to it.
+        self.assertEqual(gladys["environment"]["TZ"], "${GLADYS_TZ:-UTC}")
 
     def test_watchtower_updates_only_gladys_and_itself(self) -> None:
         compose = yaml.safe_load(

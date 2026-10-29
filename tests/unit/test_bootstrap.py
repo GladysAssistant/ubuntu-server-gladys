@@ -7,6 +7,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 
 RUNTIME = Path(__file__).resolve().parents[2] / "payload" / "usr" / "lib" / "gladys-installer"
@@ -37,6 +39,27 @@ class FakeRunner:
         return common.CommandResult(command, 0, stdout, "")
 
 
+class TimezoneRunner(FakeRunner):
+    def __init__(self, host_timezone: str = "Etc/UTC", fail: bool = False) -> None:
+        super().__init__()
+        self.host_timezone = host_timezone
+        self.fail = fail
+
+    def __call__(self, argv: list[str], **kwargs: object) -> common.CommandResult:
+        command = tuple(argv)
+        if command[0] == "timedatectl":
+            self.commands.append(command)
+            if self.fail:
+                raise OSError("timedatectl unavailable")
+            stdout = ""
+            if command[1] == "show":
+                stdout = f"{self.host_timezone}\n"
+            elif command[1] == "list-timezones":
+                stdout = "Etc/UTC\nEurope/Berlin\nEurope/Paris\n"
+            return common.CommandResult(command, 0, stdout, "")
+        return super().__call__(argv, **kwargs)
+
+
 class BootstrapTests(unittest.TestCase):
     def make_installer(self, directory: str, runner: FakeRunner | None = None) -> bootstrap.Bootstrap:
         root = Path(directory)
@@ -49,6 +72,10 @@ class BootstrapTests(unittest.TestCase):
             completed=root / "completed",
             lock=root / "bootstrap.lock",
             compose=compose,
+            compose_env=root / ".env",
+            motd=root / "update-motd.d",
+            motd_disabled=root / "motd-disabled",
+            motd_news_cache=root / "motd-news",
             version=version,
             data=root / "data",
             test_mode=root / "test-mode",
@@ -63,6 +90,8 @@ class BootstrapTests(unittest.TestCase):
             http_checker=lambda *_args, **_kwargs: True,
             port_checker=lambda: True,
             machine=lambda: "x86_64",
+            administrators=lambda: ["operator"],
+            timezone_detector=lambda: "Europe/Paris",
         )
 
     def test_completed_marker_skips_every_operation(self) -> None:
@@ -89,8 +118,12 @@ class BootstrapTests(unittest.TestCase):
             start_watchtower = commands.index(
                 ("docker", "compose", "-f", str(installer.paths.compose), "up", "-d", "watchtower")
             )
+            grant_docker = commands.index(("usermod", "--append", "--groups", "docker", "operator"))
             self.assertLess(stop_web, start_gladys)
             self.assertLess(start_gladys, start_watchtower)
+            quiet_news = commands.index(("systemctl", "mask", "--now", "motd-news.timer"))
+            self.assertLess(start_watchtower, grant_docker)
+            self.assertLess(grant_docker, quiet_news)
             self.assertTrue(installer.paths.completed.is_file())
             state = json.loads(installer.paths.state.read_text(encoding="utf-8"))
             self.assertEqual((state["phase"], state["progress"]), ("READY", 100))
@@ -151,6 +184,159 @@ class BootstrapTests(unittest.TestCase):
                 runner.commands,
                 [("systemctl", "enable", "--now", "docker.service")],
             )
+
+    def test_detected_time_zone_is_set_on_a_utc_host_and_given_to_gladys(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runner = TimezoneRunner()
+            installer = self.make_installer(directory, runner)
+
+            installer.configure_timezone()
+
+            self.assertIn(("timedatectl", "set-timezone", "Europe/Paris"), runner.commands)
+            self.assertEqual(
+                installer.paths.compose_env.read_text(encoding="utf-8"), "GLADYS_TZ=Europe/Paris\n"
+            )
+
+    def test_time_zone_already_chosen_on_the_host_is_kept(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runner = TimezoneRunner(host_timezone="Europe/Berlin")
+            installer = self.make_installer(directory, runner)
+            installer.timezone_detector = mock.Mock(return_value="Europe/Paris")
+
+            installer.configure_timezone()
+
+            installer.timezone_detector.assert_not_called()
+            self.assertNotIn("set-timezone", [command[1] for command in runner.commands])
+            self.assertEqual(
+                installer.paths.compose_env.read_text(encoding="utf-8"), "GLADYS_TZ=Europe/Berlin\n"
+            )
+
+    def test_undetected_unknown_or_unsettable_time_zone_keeps_utc(self) -> None:
+        cases = {
+            "no answer": (TimezoneRunner(), None),
+            "unknown zone": (TimezoneRunner(), "Mars/Olympus_Mons"),
+            "injected value": (TimezoneRunner(), "Europe/Paris\nEVIL=1"),
+            "timedatectl failure": (TimezoneRunner(fail=True), "Europe/Paris"),
+            "lookup crash": (TimezoneRunner(), RuntimeError("malformed answer")),
+        }
+        for name, (runner, detected) in cases.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
+                installer = self.make_installer(directory, runner)
+                installer.timezone_detector = mock.Mock(
+                    side_effect=detected if isinstance(detected, Exception) else None,
+                    return_value=detected,
+                )
+
+                installer.configure_timezone()
+
+                self.assertNotIn("set-timezone", [command[1] for command in runner.commands])
+                self.assertEqual(
+                    installer.paths.compose_env.read_text(encoding="utf-8"), "GLADYS_TZ=UTC\n"
+                )
+
+    def test_time_zone_is_configured_before_gladys_starts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runner = TimezoneRunner()
+            installer = self.make_installer(directory, runner)
+
+            self.assertEqual(installer.run(), 0)
+
+            set_timezone = runner.commands.index(("timedatectl", "set-timezone", "Europe/Paris"))
+            start_gladys = runner.commands.index(
+                ("docker", "compose", "-f", str(installer.paths.compose), "up", "-d", "gladys")
+            )
+            self.assertLess(set_timezone, start_gladys)
+
+    def test_ubuntu_login_messages_are_diverted_and_news_stopped(self) -> None:
+        class FailingDivertRunner(FakeRunner):
+            def __call__(self, argv: list[str], **kwargs: object) -> common.CommandResult:
+                if argv[0] == "dpkg-divert" and argv[-1].endswith("10-help-text"):
+                    self.commands.append(tuple(argv))
+                    raise OSError("dpkg database locked")
+                return super().__call__(argv, **kwargs)
+
+        for runner_class in (FakeRunner, FailingDivertRunner):
+            with self.subTest(runner=runner_class.__name__), tempfile.TemporaryDirectory() as directory:
+                runner = runner_class()
+                installer = self.make_installer(directory, runner)
+                installer.paths.motd.mkdir()
+                for name in ("00-header", "10-help-text", "60-unminimize", "91-contract-ua-esm-status"):
+                    (installer.paths.motd / name).write_text("#!/bin/sh\n", encoding="utf-8")
+                installer.paths.motd_news_cache.write_text("Ubuntu news\n", encoding="utf-8")
+
+                installer.quiet_ubuntu_login_messages()
+
+                diverted = [command[-1] for command in runner.commands if command[0] == "dpkg-divert"]
+                self.assertEqual(
+                    sorted(set(diverted)),
+                    [
+                        str(installer.paths.motd / "10-help-text"),
+                        str(installer.paths.motd / "60-unminimize"),
+                        str(installer.paths.motd / "91-contract-ua-esm-status"),
+                    ],
+                )
+                self.assertIn(
+                    (
+                        "dpkg-divert", "--local", "--rename",
+                        "--divert", str(installer.paths.motd_disabled / "91-contract-ua-esm-status"),
+                        "--add", str(installer.paths.motd / "91-contract-ua-esm-status"),
+                    ),
+                    runner.commands,
+                )
+                self.assertIn(("systemctl", "mask", "--now", "motd-news.timer"), runner.commands)
+                # A held dpkg lock is not waited for: READY comes first.
+                self.assertEqual(diverted.count(str(installer.paths.motd / "10-help-text")), 1)
+                self.assertTrue(installer.paths.motd_disabled.is_dir())
+                self.assertFalse(installer.paths.motd_news_cache.exists())
+
+    def test_administrators_join_the_docker_group(self) -> None:
+        for administrators in ([], ["operator"], ["operator", "second"]):
+            with self.subTest(administrators=administrators), tempfile.TemporaryDirectory() as directory:
+                runner = FakeRunner()
+                installer = self.make_installer(directory, runner)
+                installer.administrators = lambda: administrators
+
+                installer.grant_docker_access()
+
+                self.assertEqual(
+                    runner.commands,
+                    [("usermod", "--append", "--groups", "docker", name) for name in administrators],
+                )
+
+    def test_docker_access_failure_never_blocks_ready(self) -> None:
+        class FailingUsermodRunner(FakeRunner):
+            def __call__(self, argv: list[str], **kwargs: object) -> common.CommandResult:
+                if argv[0] == "usermod" and argv[-1] == "operator":
+                    self.commands.append(tuple(argv))
+                    raise OSError("group database locked")
+                return super().__call__(argv, **kwargs)
+
+        with tempfile.TemporaryDirectory() as directory:
+            runner = FailingUsermodRunner()
+            installer = self.make_installer(directory, runner)
+            installer.administrators = lambda: ["operator", "second"]
+
+            installer.grant_docker_access()
+
+            usermod = ("usermod", "--append", "--groups", "docker")
+            self.assertEqual(runner.commands.count((*usermod, "operator")), 5)
+            self.assertEqual(runner.commands[-1], (*usermod, "second"))
+
+    def test_administrator_accounts_are_ordinary_sudo_members(self) -> None:
+        uids = {"operator": 1000, "nobody": 65534, "service": 999, "second": 1001}
+
+        def getpwnam(name: str) -> SimpleNamespace:
+            if name not in uids:
+                raise KeyError(name)
+            return SimpleNamespace(pw_uid=uids[name])
+
+        sudo = SimpleNamespace(gr_mem=["service", "operator", "ghost", "nobody", "second"])
+        with mock.patch.object(bootstrap.grp, "getgrnam", return_value=sudo), mock.patch.object(
+            bootstrap.pwd, "getpwnam", side_effect=getpwnam
+        ):
+            self.assertEqual(bootstrap.administrator_accounts(), ["operator", "second"])
+        with mock.patch.object(bootstrap.grp, "getgrnam", side_effect=KeyError("sudo")):
+            self.assertEqual(bootstrap.administrator_accounts(), [])
 
     def test_final_verification_checks_docker_without_avahi(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

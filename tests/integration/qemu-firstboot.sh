@@ -59,6 +59,7 @@ trap - EXIT
 assert_completed_disk "$DISK"
 assert_operator_account_and_ssh "$DISK"
 assert_installer_language "$DISK"
+assert_gladys_timezone "$DISK"
 if [[ "$PROFILE" == "ci-smoke" ]]; then
 	assert_single_resources "$DISK" gladys-test-app
 else

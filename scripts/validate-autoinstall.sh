@@ -232,7 +232,7 @@ legacy_cloud_init_validator="$validator_runtime/system_scripts/subiquity-legacy-
 # cloud-init validator from the same pristine export through its SNAP path.
 (
 	cd -- "$validator_runtime"
-	for config in autoinstall.yaml autoinstall-ci.yaml; do
+	for config in autoinstall.yaml autoinstall-ci.yaml autoinstall-single-disk.yaml; do
 		python3 scripts/validate-autoinstall-user-data.py \
 			--json-schema "$temporary/autoinstall-schema.json" \
 			--no-expect-cloudconfig "$temporary/canonical-validator/$config"

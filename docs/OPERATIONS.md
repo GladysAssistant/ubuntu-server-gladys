@@ -48,6 +48,22 @@ The completion marker is `/var/lib/gladys-installer/completed`. The sibling `sta
 - Kernel and core library updates only take effect after a reboot, which never happens automatically. Ubuntu creates `/var/run/reboot-required` when one is pending; log in as described under [Diagnostics](#diagnostics) and run `sudo reboot`. Gladys and Watchtower start again on their own.
 - The only account is the one created during installation. The OpenSSH server is installed unless it was unchecked then. Root stays locked and no default credentials exist: see [SECURITY.md](SECURITY.md).
 
+## Time zone
+
+First boot detects the time zone from the public IP address and applies it to both the system and Gladys; it falls back to UTC if detection fails. To change it later, for example to `Europe/Paris`:
+
+```bash
+sudo timedatectl set-timezone Europe/Paris
+```
+
+```bash
+echo GLADYS_TZ=Europe/Paris | sudo tee /opt/gladys/.env
+```
+
+```bash
+docker compose -f /opt/gladys/compose.yaml up -d gladys
+```
+
 ## Diagnostics
 
 `gladys-diagnostics` prints safe, non-secret support information: installer and Ubuntu versions, boot mode, network state, disk usage, Docker and Compose status, service states, and recent first boot journal lines.
@@ -58,7 +74,11 @@ Log in with the account created during installation — on a virtual console wit
 sudo gladys-diagnostics
 ```
 
+Each login, over SSH or on a virtual console, starts with the same Gladys status as the tty1 console: the Gladys address, the setup progress while first boot runs, and whether Gladys is running.
+
 It uses an allowlist of safe commands and never dumps the Gladys database, container inspection output, environment variables, tokens, or passwords, so its output can be shared in a support request.
+
+The account created during installation can run Docker commands such as `docker ps` or `docker compose -f /opt/gladys/compose.yaml logs gladys` without `sudo` or a password: it joins the `docker` group at the end of first boot, so log in again once after the console shows **Ready**.
 
 Detailed logs live in journald:
 
@@ -78,6 +98,7 @@ journalctl -u gladys-console.service
 | Power was cut during provisioning | Just power the machine back on. Every phase is idempotent, package state is repaired automatically, and provisioning continues from where it left off |
 | Console shows `FATAL` | A deterministic configuration problem was found. Run `sudo gladys-diagnostics` and read `journalctl -u gladys-firstboot.service` for the exact cause. The service exits with code 78 and does not retry |
 | Gladys stops answering after months of use | Check `docker compose -f /opt/gladys/compose.yaml ps` and the diagnostics output. Gladys and Watchtower restart automatically on reboot |
+| `docker` asks for `sudo` or reports `permission denied` on the Docker socket | The account joins the `docker` group at the end of first boot. Log out and back in (or reconnect over SSH) once after the console shows **Ready** |
 
 ## Reinstalling
 

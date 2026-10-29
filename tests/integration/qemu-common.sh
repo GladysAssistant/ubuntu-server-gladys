@@ -420,8 +420,19 @@ PY
 assert_installer_language() {
 	local disk="$1" language
 	language="$(virt-cat -a "$disk" /etc/gladys-installer/language)"
-	[[ "$language" == "fr_FR.UTF-8" ]] || {
+	[[ "$language" == "en_US.UTF-8" ]] || {
 		printf 'Installer language not recorded: %s\n' "$language" >&2
+		return 1
+	}
+}
+
+# First boot detects the time zone and hands it to Gladys through Compose;
+# a failed lookup leaves UTC, so only the shape of the value is asserted.
+assert_gladys_timezone() {
+	local disk="$1" environment
+	environment="$(virt-cat -a "$disk" /opt/gladys/.env)"
+	[[ "$environment" =~ ^GLADYS_TZ=[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+)*$ ]] || {
+		printf 'Gladys time zone not recorded: %s\n' "$environment" >&2
 		return 1
 	}
 }
@@ -489,6 +500,8 @@ if not shadow.get("gladys-ci", "").startswith("$6$"):
     raise SystemExit("operator account has no usable password")
 if "gladys-ci" not in groups.get("sudo", []):
     raise SystemExit("operator account is not an administrator")
+if "gladys-ci" not in groups.get("docker", []):
+    raise SystemExit("operator account cannot use Docker without sudo")
 if not shadow.get("root", "").startswith(("!", "*")):
     raise SystemExit("root is not locked")
 if (root / "hostname").read_text(encoding="utf-8").strip() != "gladys":

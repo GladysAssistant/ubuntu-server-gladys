@@ -22,20 +22,23 @@ INITRD_LINE = re.compile(
 )
 CANONICAL_INSTALLER_TITLE = "Try or Install Ubuntu Server"
 BOOT_SETTING = re.compile(
-    r"^[ \t]*set[ \t]+(?P<name>default|timeout_style|timeout)[ \t]*=[ \t]*"
+    r"^[ \t]*set[ \t]+(?P<name>default|timeout_style|timeout|color_normal"
+    r"|menu_color_normal|menu_color_highlight)[ \t]*=[ \t]*"
     r"(?P<value>[^\s#;]+)\s*(?:#.*)?$",
     re.MULTILINE,
 )
+# GRUB shows the menu once grub.cfg has run, so these final settings win over
+# Canonical's. Text mode only offers the 16 VGA colours: blue is the closest to
+# Gladys blue.
 BOOT_POLICY = {
     "default": "0",
     "timeout_style": "menu",
     "timeout": "3",
+    "color_normal": "white/blue",
+    "menu_color_normal": "white/blue",
+    "menu_color_highlight": "blue/white",
 }
-BOOT_POLICY_LINES = (
-    "set default=0",
-    "set timeout_style=menu",
-    "set timeout=3",
-)
+BOOT_POLICY_LINES = tuple(f"set {name}={value}" for name, value in BOOT_POLICY.items())
 
 
 class GrubPatchError(ValueError):

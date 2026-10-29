@@ -21,8 +21,10 @@ For every run, record:
 - [ ] AMD Ryzen class mini-PC installs and reboots.
 - [ ] NVMe target is displayed correctly and installation succeeds.
 - [ ] SATA SSD target is displayed correctly and installation succeeds.
-- [ ] Single disk system retains explicit selection and erase confirmation.
-- [ ] Multi disk system identifies every disk correctly and erases only the confirmed target.
+- [ ] Single internal disk system skips the storage screen, installs on that disk with LVM whose root volume fills the disk (`df -h /`), and still asks the destructive-action confirmation.
+- [ ] Single internal disk system with an additional USB drive plugged in still skips the storage screen and leaves the USB drive untouched.
+- [ ] A system whose only internal disk, or one of whose disks, reports `HOTPLUG` or `RM` as 1 in `lsblk -o NAME,TRAN,HOTPLUG,RM` shows the storage screen.
+- [ ] Multi disk system shows the storage screen with LVM preselected, identifies every disk correctly, erases only the confirmed target, and ends with the root volume size confirmed on the summary screen (`df -h /`).
 
 ## Firmware and boot
 
@@ -61,11 +63,15 @@ Secure Boot is expected to remain compatible because the Ubuntu signed boot chai
 
 ## Usability
 
-- [ ] The language screen appears first with French selected and localizes the remaining supported Subiquity screens after confirmation.
-- [ ] The keyboard screen appears before storage with French AZERTY selected and accepts another layout.
+- [ ] The language screen appears first with English selected; choosing another language localizes the remaining supported Subiquity screens after confirmation.
+- [ ] The keyboard screen appears before storage with the layout of the chosen language suggested; after choosing French AZERTY, typing on the next screens produces AZERTY characters.
 - [ ] A non-technical tester can identify the destructive disk confirmation.
 - [ ] The identity screen requires creating an account and the SSH screen presents the OpenSSH server selected by default.
 - [ ] The machine is named `gladys` after installation, whatever server name was typed on the identity screen.
+- [ ] After first boot reaches **Ready** and a fresh login, `docker ps` works without `sudo` or a password.
+- [ ] `timedatectl` and the time shown by Gladys match the local time zone of the test site.
+- [ ] The USB boot menu is white on blue with **Install Gladys Assistant** highlighted, with Secure Boot enabled and disabled.
+- [ ] An SSH login and a Ctrl+Alt+F2 login show the Gladys status instead of Ubuntu's help links, `unminimize` notice, and Ubuntu Pro advertising, and the Ctrl+Alt+F2 prompt shows the Gladys address.
 - [ ] The setup page follows the selected language; exercise French, English, a third Latin language, Chinese, and one right-to-left language.
 - [ ] tty1 follows supported Latin, Greek, and Cyrillic selections and uses readable English for Arabic, Hebrew, Tibetan, Japanese, and Chinese rather than emitting unusable glyphs.
 - [ ] Long package and container downloads keep a visible activity animation without displaying fabricated byte counts.

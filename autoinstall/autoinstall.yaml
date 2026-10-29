@@ -6,15 +6,14 @@ autoinstall:
     - storage
     - identity
     - ssh
-  locale: fr_FR.UTF-8
-  keyboard:
-    layout: fr
+  locale: en_US.UTF-8
   timezone: Etc/UTC
   source:
     id: ubuntu-server-minimal
   storage:
     layout:
-      name: direct
+      name: lvm
+      sizing-policy: all
   ssh:
     install-server: true
   kernel-crash-dumps:
@@ -30,6 +29,10 @@ autoinstall:
     manage_etc_hosts: true
     disable_root: true
     users: []
+  # On a machine with a single internal disk, install there with the layout
+  # above instead of showing the storage screen. Never fails the install.
+  early-commands:
+    - [sh, -c, "python3 /cdrom/gladys/single-disk-storage.py /autoinstall.yaml || true"]
   late-commands:
     - [sh, -c, "cd /cdrom/gladys && sha256sum -c gladys-payload.tar.sha256"]
     - [sh, -c, "tar --extract --file=/cdrom/gladys/gladys-payload.tar --directory=/target --numeric-owner --same-permissions"]
