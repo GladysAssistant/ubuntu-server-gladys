@@ -1,0 +1,11 @@
+# Installed as /etc/netplan/90-gladys-wired.yaml only when the machine had no
+# network during the installation: the Ubuntu installer then configures no
+# interface at all, and a cable plugged in afterwards would never get an
+# address. Use DHCP on every wired interface, whichever one gets the cable.
+network:
+  version: 2
+  ethernets:
+    wired:
+      match:
+        name: "en*"
+      dhcp4: true

@@ -44,10 +44,10 @@ jobs:
           version="$(tr -d '\r\n' < VERSION)"
           bash tests/integration/qemu-install.sh --iso "dist/gladys-assistant-installer-ci-real-v${version}-amd64.iso" --work-dir build/qemu-real
           bash tests/integration/qemu-firstboot.sh --disk build/qemu-real/system.qcow2 --vars build/qemu-real/OVMF_VARS.fd --work-dir build/qemu-real-boot --profile ci-real
-      - name: Offline-to-online recovery on one disk
+      - name: Install without network, then offline-to-online recovery on one disk
         run: |
           version="$(tr -d '\r\n' < VERSION)"
-          bash tests/integration/qemu-install.sh --iso "dist/gladys-assistant-installer-ci-smoke-v${version}-amd64.iso" --work-dir build/qemu-network
+          bash tests/integration/qemu-install.sh --iso "dist/gladys-assistant-installer-ci-smoke-v${version}-amd64.iso" --work-dir build/qemu-network --offline
           bash tests/integration/qemu-network-recovery.sh --disk build/qemu-network/system.qcow2 --vars build/qemu-network/OVMF_VARS.fd --work-dir build/qemu-network-recovery
       - name: Deterministic forced-power-loss recovery
         run: |

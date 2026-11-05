@@ -111,7 +111,7 @@ jobs:
           test -c /dev/kvm
           sudo chmod 666 /dev/kvm
           version="$(tr -d '\r\n' < VERSION)"
-          bash tests/integration/qemu-install.sh --iso "dist/gladys-assistant-installer-ci-smoke-v${version}-amd64.iso" --work-dir build/network
+          bash tests/integration/qemu-install.sh --iso "dist/gladys-assistant-installer-ci-smoke-v${version}-amd64.iso" --work-dir build/network --offline
           bash tests/integration/qemu-network-recovery.sh --disk build/network/system.qcow2 --vars build/network/OVMF_VARS.fd --work-dir build/network-recovery
       - name: Upload network recovery diagnostics
         if: always()

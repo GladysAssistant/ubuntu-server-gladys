@@ -776,6 +776,16 @@ fi
                 self.assertEqual(upload["if"], "always()")
                 self.assertIn("build/**/*serial.log", upload["with"]["path"])
 
+    def test_network_recovery_disk_is_installed_without_network(self) -> None:
+        install = (INTEGRATION / "qemu-install.sh").read_text(encoding="utf-8")
+        self.assertIn('NETDEV="hubport,id=net0,hubid=0"', install)
+        self.assertIn('-netdev "$NETDEV"', install)
+        for workflow, disk in (("nightly.yml", "build/qemu-network"), ("release.yml", "build/network")):
+            with self.subTest(workflow=workflow):
+                text = (ROOT / ".github" / "workflows" / workflow).read_text(encoding="utf-8")
+                self.assertIn(f"--work-dir {disk} --offline\n", text)
+                self.assertIn(f"qemu-network-recovery.sh --disk {disk}/system.qcow2", text)
+
     def test_recovery_scripts_reuse_disk_and_power_test_forces_termination(self) -> None:
         network = (INTEGRATION / "qemu-network-recovery.sh").read_text(encoding="utf-8")
         power = (INTEGRATION / "qemu-power-loss.sh").read_text(encoding="utf-8")

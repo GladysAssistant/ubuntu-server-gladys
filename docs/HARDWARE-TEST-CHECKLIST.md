@@ -44,6 +44,7 @@ Secure Boot is expected to remain compatible because the Ubuntu signed boot chai
 - [ ] `gladysassistant.local` resolves after Gladys is ready, from the Linux, macOS/iOS, Windows, and Android clients available to the test.
 - [ ] The tty1 screen displays the correct fallback IPv4 address.
 - [ ] Installation completes without Internet, first boot shows `WAIT_NETWORK`, and connecting Internet resumes setup without a reboot.
+- [ ] Installation completes with the Ethernet cable unplugged, and plugging it in afterwards, into any Ethernet port, resumes setup without a reboot.
 - [ ] An already configured alternative interface is not prevented from working.
 
 ## Runtime and recovery

@@ -9,6 +9,7 @@ source "$SCRIPT_DIR/qemu-common.sh"
 ISO=""
 WORK_DIR=""
 INSTALL_TIMEOUT="${INSTALL_TIMEOUT:-3600}"
+NETDEV="user,id=net0"
 while (($#)); do
 	case "$1" in
 	--iso)
@@ -19,6 +20,11 @@ while (($#)); do
 		WORK_DIR="$2"
 		shift 2
 		;;
+	--offline)
+		# A link with no DHCP server, as when the Ethernet cable is unplugged.
+		NETDEV="hubport,id=net0,hubid=0"
+		shift
+		;;
 	*)
 		printf 'Unknown argument: %s\n' "$1" >&2
 		exit 64
@@ -26,7 +32,7 @@ while (($#)); do
 	esac
 done
 [[ -f "$ISO" && -n "$WORK_DIR" ]] || {
-	printf 'Usage: %s --iso FILE --work-dir DIR\n' "${0##*/}" >&2
+	printf 'Usage: %s --iso FILE --work-dir DIR [--offline]\n' "${0##*/}" >&2
 	exit 64
 }
 require_qemu_tools
@@ -56,7 +62,7 @@ timeout --signal=TERM --kill-after=30 "$INSTALL_TIMEOUT" \
 	-drive "if=virtio,format=qcow2,discard=unmap,file=$DISK" \
 	-drive "media=cdrom,readonly=on,format=raw,file=$ISO" \
 	-device virtio-net-pci,netdev=net0 \
-	-netdev user,id=net0 \
+	-netdev "$NETDEV" \
 	-boot once=d,menu=off \
 	-no-reboot \
 	-display none \
