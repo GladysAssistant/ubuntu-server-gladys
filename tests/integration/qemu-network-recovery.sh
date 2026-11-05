@@ -35,6 +35,22 @@ done
 require_qemu_tools
 prepare_libguestfs "$WORK_DIR"
 find_ovmf
+
+show_netplan() {
+	virt-ls -a "$DISK" /etc/netplan | while read -r name; do
+		printf -- '--- /etc/netplan/%s\n' "$name"
+		virt-cat -a "$DISK" "/etc/netplan/$name"
+	done
+}
+
+# The disk was installed without network (qemu-install.sh --offline), so the
+# installer must have replaced its netplan file with the wired fallback.
+show_netplan
+[[ "$(virt-cat -a "$DISK" /etc/netplan/00-installer-config.yaml)" == *'name: "en*"'* ]] || {
+	printf 'The installation without network did not install the wired fallback\n' >&2
+	exit 1
+}
+
 trap stop_vm EXIT
 start_vm "$DISK" "$VARS" "$WORK_DIR/offline-serial.log" "$HOST_PORT" offline # restrict=on
 wait_for_phase "$HOST_PORT" WAIT_NETWORK 900
@@ -46,3 +62,10 @@ virt-cat -a "$DISK" /var/lib/gladys-installer/state.json |
 bash "$SCRIPT_DIR/qemu-firstboot.sh" \
 	--disk "$DISK" --vars "$VARS" --work-dir "$WORK_DIR/network-resumed" \
 	--profile ci-smoke --host-port "$HOST_PORT"
+
+# Online, first boot keeps DHCP on the port in use only.
+show_netplan
+[[ "$(virt-cat -a "$DISK" /etc/netplan/00-installer-config.yaml)" == *'Written by Gladys first boot'* ]] || {
+	printf 'First boot kept DHCP on every Ethernet port\n' >&2
+	exit 1
+}

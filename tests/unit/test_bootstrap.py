@@ -60,6 +60,22 @@ class TimezoneRunner(FakeRunner):
         return super().__call__(argv, **kwargs)
 
 
+class RouteRunner(FakeRunner):
+    def __init__(self, routes: str) -> None:
+        super().__init__()
+        self.routes = routes
+
+    def __call__(self, argv: list[str], **kwargs: object) -> common.CommandResult:
+        command = tuple(argv)
+        if command == ("ip", "-j", "route", "show", "default"):
+            self.commands.append(command)
+            return common.CommandResult(command, 0, self.routes, "")
+        return super().__call__(argv, **kwargs)
+
+
+WIRED_FALLBACK = RUNTIME.parents[1] / "share" / "gladys-installer" / "netplan-wired-dhcp.yaml"
+
+
 class BootstrapTests(unittest.TestCase):
     def make_installer(self, directory: str, runner: FakeRunner | None = None) -> bootstrap.Bootstrap:
         root = Path(directory)
@@ -78,6 +94,8 @@ class BootstrapTests(unittest.TestCase):
             motd_news_cache=root / "motd-news",
             version=version,
             data=root / "data",
+            netplan=root / "netplan" / "00-installer-config.yaml",
+            wired_fallback=WIRED_FALLBACK,
             test_mode=root / "test-mode",
             test_compose=root / "test-compose.yaml",
             ci_barrier_package=root / "gladys-ci-dpkg-barrier_1.0_all.deb",
@@ -246,6 +264,70 @@ class BootstrapTests(unittest.TestCase):
                 ("docker", "compose", "-f", str(installer.paths.compose), "up", "-d", "gladys")
             )
             self.assertLess(set_timezone, start_gladys)
+
+    def install_wired_fallback(self, installer: bootstrap.Bootstrap) -> None:
+        installer.paths.netplan.parent.mkdir()
+        installer.paths.netplan.write_bytes(WIRED_FALLBACK.read_bytes())
+
+    def test_wired_fallback_keeps_dhcp_on_the_port_in_use_once_online(self) -> None:
+        routes = json.dumps(
+            [
+                {"dst": "default", "gateway": "192.168.1.1", "dev": "enp2s0"},
+                {"dst": "default", "gateway": "10.8.0.1", "dev": "wg0"},
+            ]
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            installer = self.make_installer(directory, RouteRunner(routes))
+            self.install_wired_fallback(installer)
+
+            self.assertEqual(installer.run(), 0)
+
+            netplan = installer.paths.netplan
+            self.assertEqual(
+                netplan.read_text(encoding="utf-8"),
+                "# Written by Gladys first boot: DHCP on the Ethernet port in use.\n"
+                "network:\n  version: 2\n  ethernets:\n    enp2s0:\n      dhcp4: true\n",
+            )
+            self.assertEqual(netplan.stat().st_mode & 0o777, 0o600)
+
+    def test_installer_network_configuration_is_left_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runner = RouteRunner(json.dumps([{"dst": "default", "dev": "enp1s0"}]))
+            installer = self.make_installer(directory, runner)
+            installer.paths.netplan.parent.mkdir()
+            installer.paths.netplan.write_text(
+                "network:\n  version: 2\n  ethernets:\n    enp1s0:\n      dhcp4: true\n",
+                encoding="utf-8",
+            )
+            before = installer.paths.netplan.read_bytes()
+
+            installer.keep_dhcp_on_port_in_use()
+
+            self.assertEqual(installer.paths.netplan.read_bytes(), before)
+            self.assertNotIn(("ip", "-j", "route", "show", "default"), runner.commands)
+
+    def test_wired_fallback_is_kept_when_the_port_in_use_is_unknown(self) -> None:
+        class FailingRouteRunner(FakeRunner):
+            def __call__(self, argv: list[str], **kwargs: object) -> common.CommandResult:
+                if argv[0] == "ip":
+                    raise OSError("ip unavailable")
+                return super().__call__(argv, **kwargs)
+
+        cases = {
+            "no default route": RouteRunner("[]"),
+            "route on another interface": RouteRunner(json.dumps([{"dst": "default", "dev": "wlp3s0"}])),
+            "malformed output": RouteRunner("not json"),
+            "unexpected output": RouteRunner(json.dumps({"dev": "enp1s0"})),
+            "ip failure": FailingRouteRunner(),
+        }
+        for name, runner in cases.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
+                installer = self.make_installer(directory, runner)
+                self.install_wired_fallback(installer)
+
+                self.assertEqual(installer.run(), 0)
+
+                self.assertEqual(installer.paths.netplan.read_bytes(), WIRED_FALLBACK.read_bytes())
 
     def test_ubuntu_login_messages_are_diverted_and_news_stopped(self) -> None:
         class FailingDivertRunner(FakeRunner):

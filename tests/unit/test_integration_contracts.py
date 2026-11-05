@@ -785,6 +785,13 @@ fi
                 text = (ROOT / ".github" / "workflows" / workflow).read_text(encoding="utf-8")
                 self.assertIn(f"--work-dir {disk} --offline\n", text)
                 self.assertIn(f"qemu-network-recovery.sh --disk {disk}/system.qcow2", text)
+        # The recovery checks the fallback before booting and the port kept by
+        # first boot afterwards, with the marker bootstrap writes.
+        network = (INTEGRATION / "qemu-network-recovery.sh").read_text(encoding="utf-8")
+        bootstrap = (ROOT / "payload" / "usr" / "lib" / "gladys-installer" / "bootstrap.py").read_text(encoding="utf-8")
+        self.assertIn("""*'name: "en*"'*""", network)
+        self.assertIn("*'Written by Gladys first boot'*", network)
+        self.assertIn('"# Written by Gladys first boot: DHCP on the Ethernet port in use.\\n"', bootstrap)
 
     def test_recovery_scripts_reuse_disk_and_power_test_forces_termination(self) -> None:
         network = (INTEGRATION / "qemu-network-recovery.sh").read_text(encoding="utf-8")

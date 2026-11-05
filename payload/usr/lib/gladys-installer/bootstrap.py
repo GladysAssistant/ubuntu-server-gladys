@@ -58,6 +58,7 @@ UBUNTU_MOTD_SCRIPTS = (
     "91-contract-ua-esm-status",
 )
 TIMEZONE_NAME = re.compile(r"[A-Za-z0-9_+-]+(?:/[A-Za-z0-9_+-]+)*")
+WIRED_PORT = re.compile(r"en[a-z0-9]+")
 
 T = TypeVar("T")
 COMMAND_FAILURES = (common.CommandError, OSError, subprocess.TimeoutExpired)
@@ -76,6 +77,10 @@ class InstallerPaths:
     motd_news_cache: Path = Path("/var/cache/motd-news")
     version: Path = Path("/etc/gladys-installer/version")
     data: Path = Path("/var/lib/gladysassistant")
+    # The installer replaces netplan's configuration with the wired fallback
+    # when the machine had no network during the installation.
+    netplan: Path = Path("/etc/netplan/00-installer-config.yaml")
+    wired_fallback: Path = Path("/usr/share/gladys-installer/netplan-wired-dhcp.yaml")
     test_mode: Path = Path("/etc/gladys-installer/test-mode")
     test_compose: Path = Path("/etc/gladys-installer/test-compose.yaml")
     ci_barrier_package: Path = Path(
@@ -235,6 +240,44 @@ class Bootstrap:
             delay = next(delays)
             LOG.info("Internet unavailable; retrying in %ss", delay)
             self.sleep(delay)
+
+    def keep_dhcp_on_port_in_use(self) -> None:
+        """After an installation without Ethernet, keep DHCP on the port in use.
+
+        The wired fallback enables DHCP on every Ethernet port, so at every
+        boot systemd-networkd-wait-online would wait for a cable in each unused
+        port. Once online, keep DHCP only on the ports holding the default
+        route, as after an installation with the cable plugged in. Any doubt
+        keeps the fallback: this never blocks provisioning.
+        """
+        try:
+            if self.paths.netplan.read_bytes() != self.paths.wired_fallback.read_bytes():
+                return
+        except OSError:
+            return
+        try:
+            result = self.runner(["ip", "-j", "route", "show", "default"], timeout=30)
+            ports = sorted(
+                {
+                    route["dev"]
+                    for route in json.loads(result.stdout)
+                    if WIRED_PORT.fullmatch(str(route.get("dev", "")))
+                }
+            )
+            if not ports:
+                LOG.warning("No Ethernet port holds the default route; keeping DHCP on every port")
+                return
+            ethernets = "".join(f"    {port}:\n      dhcp4: true\n" for port in ports)
+            common.atomic_write_text(
+                self.paths.netplan,
+                "# Written by Gladys first boot: DHCP on the Ethernet port in use.\n"
+                f"network:\n  version: 2\n  ethernets:\n{ethernets}",
+                mode=0o600,
+            )
+        except (*COMMAND_FAILURES, ValueError, TypeError, AttributeError):
+            LOG.warning("Unable to keep DHCP on the port in use only; keeping every port", exc_info=True)
+            return
+        LOG.info("DHCP kept on the Ethernet port in use: %s", ", ".join(ports))
 
     def _host_timezone(self) -> str:
         try:
@@ -547,6 +590,7 @@ class Bootstrap:
         self.preflight()
         self.state(common.Phase.WAIT_NETWORK, "Waiting for an Ethernet Internet connection…")
         self.wait_for_internet()
+        self.keep_dhcp_on_port_in_use()
         self.state(common.Phase.APT_UPDATE, "Refreshing Ubuntu package information…")
         self.configure_timezone()
         self.apt_update()

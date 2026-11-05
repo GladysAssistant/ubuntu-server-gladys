@@ -1,7 +1,8 @@
-# Installed as /etc/netplan/90-gladys-wired.yaml only when the machine had no
-# network during the installation: the Ubuntu installer then configures no
-# interface at all, and a cable plugged in afterwards would never get an
+# Replaces the installer's /etc/netplan/00-installer-config.yaml when the
+# machine had no network during the installation: the installer then enables
+# DHCP on no interface, and a cable plugged in afterwards would never get an
 # address. Use DHCP on every wired interface, whichever one gets the cable.
+# Once online, first boot keeps DHCP on the port in use only.
 network:
   version: 2
   ethernets:

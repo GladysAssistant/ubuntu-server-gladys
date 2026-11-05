@@ -92,7 +92,7 @@ class AutoinstallConfigurationTests(unittest.TestCase):
     def test_install_without_network_falls_back_to_dhcp_on_wired_interfaces(self) -> None:
         commands = load_autoinstall("autoinstall.yaml")["late-commands"]
         extract_at = next(i for i, command in enumerate(commands) if "tar --extract" in str(command))
-        fallback_at = next(i for i, command in enumerate(commands) if "90-gladys-wired.yaml" in str(command))
+        fallback_at = next(i for i, command in enumerate(commands) if "netplan-wired-dhcp.yaml" in str(command))
         self.assertLess(extract_at, fallback_at)
         fallback = commands[fallback_at]
         payload_file = ROOT / "payload" / "usr" / "share" / "gladys-installer" / "netplan-wired-dhcp.yaml"
@@ -101,23 +101,29 @@ class AutoinstallConfigurationTests(unittest.TestCase):
             {"network": {"version": 2, "ethernets": {"wired": {"match": {"name": "en*"}, "dhcp4": True}}}},
         )
 
-        # What Subiquity writes to the target: an interface without an address
-        # after its DHCP wait is left out (subiquitycore/models/network.py).
-        offline = {"network": {"version": 2, "ethernets": {}}}
-        online = {"network": {"version": 2, "ethernets": {"enp1s0": {"dhcp4": True}}}}
-        for name, installer_config, expect_fallback in (
-            ("offline", offline, True),
-            ("online", online, False),
-        ):
-            with self.subTest(install=name), tempfile.TemporaryDirectory() as directory:
+        # What Subiquity writes to the target. An interface without an address
+        # after its DHCP wait loses dhcp4 and dhcp6 but keeps the rest of its
+        # live-system definition, such as its MAC match, and is left out only
+        # when nothing remains (subiquitycore/models/network.py and netplan.py).
+        stripped = {"match": {"macaddress": "52:54:00:12:34:56"}, "set-name": "enp0s2"}
+        cases = {
+            "offline, interface left out": ({}, True),
+            "offline, interface kept without DHCP": ({"enp0s2": stripped}, True),
+            "online": ({"enp1s0": {"dhcp4": True}}, False),
+        }
+        for name, (ethernets, expect_fallback) in cases.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
                 target = Path(directory)
                 netplan = target / "etc" / "netplan"
                 netplan.mkdir(parents=True)
-                (netplan / "00-installer-config.yaml").write_text(
+                installer_config = netplan / "00-installer-config.yaml"
+                installer_config.write_text(
                     "# This is the network config written by 'subiquity'\n"
-                    + yaml.dump(installer_config, default_flow_style=False),
+                    + yaml.dump({"network": {"version": 2, "ethernets": ethernets}}, default_flow_style=False),
                     encoding="utf-8",
                 )
+                installer_config.chmod(0o600)
+                before = installer_config.read_bytes()
                 share = target / "usr" / "share" / "gladys-installer"
                 share.mkdir(parents=True)
                 shutil.copyfile(payload_file, share / payload_file.name)
@@ -125,11 +131,11 @@ class AutoinstallConfigurationTests(unittest.TestCase):
                 script = fallback[2].replace("/target/", f"{target}/")
                 subprocess.run([fallback[0], fallback[1], script], check=True)
 
-                installed = netplan / "90-gladys-wired.yaml"
-                self.assertEqual(installed.exists(), expect_fallback)
-                if expect_fallback:
-                    self.assertEqual(installed.read_bytes(), payload_file.read_bytes())
-                    self.assertEqual(stat.S_IMODE(installed.stat().st_mode), 0o600)
+                # Only one netplan file, so no leftover definition can shadow DHCP.
+                self.assertEqual([path.name for path in netplan.iterdir()], ["00-installer-config.yaml"])
+                expected = payload_file.read_bytes() if expect_fallback else before
+                self.assertEqual(installer_config.read_bytes(), expected)
+                self.assertEqual(stat.S_IMODE(installer_config.stat().st_mode), 0o600)
 
     def test_installer_version_is_independent_from_gladys(self) -> None:
         version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
