@@ -787,7 +787,7 @@ fi
                 self.assertIn(f"qemu-network-recovery.sh --disk {disk}/system.qcow2", text)
         # The recovery checks DHCP on every Ethernet port before booting.
         network = (INTEGRATION / "qemu-network-recovery.sh").read_text(encoding="utf-8")
-        self.assertIn("""*'name: "en*"'*""", network)
+        self.assertIn("""*'name: "en*"'* && "$netplan" == *'name: "eth*"'*""", network)
 
     def test_every_boot_has_an_unplugged_port_and_first_boot_does_not_wait_for_it(self) -> None:
         common = (INTEGRATION / "qemu-common.sh").read_text(encoding="utf-8")

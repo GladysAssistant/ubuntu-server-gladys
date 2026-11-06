@@ -98,7 +98,16 @@ class AutoinstallConfigurationTests(unittest.TestCase):
         payload_file = ROOT / "payload" / "usr" / "share" / "gladys-installer" / "netplan-wired-dhcp.yaml"
         self.assertEqual(
             yaml.safe_load(payload_file.read_text(encoding="utf-8")),
-            {"network": {"version": 2, "ethernets": {"wired": {"match": {"name": "en*"}, "dhcp4": True}}}},
+            {
+                "network": {
+                    "version": 2,
+                    "ethernets": {
+                        "wired": {"match": {"name": "en*"}, "dhcp4": True},
+                        # Interfaces without a predictable name, as in Hyper-V.
+                        "wired-eth": {"match": {"name": "eth*"}, "dhcp4": True},
+                    },
+                }
+            },
         )
 
         # What Subiquity writes to the target. An interface without an address
@@ -148,7 +157,8 @@ class AutoinstallConfigurationTests(unittest.TestCase):
             directives,
             [
                 # netplan skips the service when no interface matches "wired"
-                # early at boot: reset its condition, keep the unit's own.
+                # or "wired-eth" early at boot: reset its condition, keep the
+                # unit's own.
                 "[Unit]",
                 "ConditionPathIsSymbolicLink=",
                 "ConditionCapability=CAP_NET_ADMIN",

@@ -47,7 +47,8 @@ show_netplan() {
 # installer must still have replaced its netplan file with DHCP on every
 # Ethernet port, so the cable plugged in afterwards gets an address.
 show_netplan
-[[ "$(virt-cat -a "$DISK" /etc/netplan/00-installer-config.yaml)" == *'name: "en*"'* ]] || {
+netplan="$(virt-cat -a "$DISK" /etc/netplan/00-installer-config.yaml)"
+[[ "$netplan" == *'name: "en*"'* && "$netplan" == *'name: "eth*"'* ]] || {
 	printf 'The installer did not enable DHCP on every Ethernet port\n' >&2
 	exit 1
 }

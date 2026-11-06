@@ -1,12 +1,18 @@
 # Installed by the Gladys installer in place of the installer's own netplan
 # file, which only enables DHCP on the interfaces that had an address during
 # the installation. Use DHCP on every wired interface, so the Ethernet cable
-# works in any port, at any time. A definition named after an interface, such
-# as enp1s0 for a static address, takes precedence over "wired".
+# works in any port, at any time. Wired interfaces are named en*, or eth* when
+# the kernel gives no predictable name, as in a Hyper-V VM. A definition named
+# after an interface, such as enp1s0 for a static address, takes precedence
+# over "wired" and "wired-eth".
 network:
   version: 2
   ethernets:
     wired:
       match:
         name: "en*"
+      dhcp4: true
+    wired-eth:
+      match:
+        name: "eth*"
       dhcp4: true
