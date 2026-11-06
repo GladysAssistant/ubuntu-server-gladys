@@ -73,9 +73,11 @@ bash tests/integration/qemu-firstboot.sh \
   --profile ci-smoke
 ```
 
+Every boot started by these scripts has a second Ethernet port without a cable: QEMU starts paused, its monitor sets that link down, then resumes the VM. `qemu-firstboot.sh` reads the installed journal and requires `systemd-networkd-wait-online` to run, not be skipped, and finish without timing out, so Docker waits for the network but never for an unused port.
+
 Two additional scripts exercise the failure paths that matter for an unattended appliance:
 
-- `qemu-network-recovery.sh` boots an installed smoke disk with restricted slirp networking, observes the `WAIT_NETWORK` phase, powers off, and resumes the same disk online. Provisioning must finish without any reinstallation.
+- `qemu-network-recovery.sh` boots an installed smoke disk with restricted slirp networking, observes the `WAIT_NETWORK` phase, powers off, and resumes the same disk online. Provisioning must finish without any reinstallation. It expects a disk installed with `qemu-install.sh --offline`, a network link without any DHCP server, as when the Ethernet cable is unplugged during the installation. It prints the installed netplan files and checks DHCP on every Ethernet port before booting.
 - `qemu-power-loss.sh` supplies a QEMU firmware test signal, waits until the `ci-smoke` barrier package is inside its blocking `postinst`, and kills QEMU. Read-only inspection proves the package is unpacked or half configured before reboot; the same disk then resumes without the signal, repairs dpkg, and must end with exactly one installed barrier package, one application container, one Watchtower container, one data directory, and one completion marker.
 
 The scheduled and release jobs additionally install the `ci-real` profile, wait for a real Gladys HTTP handoff, and inspect the stopped disk for Gladys, Watchtower, completion metadata, the single CI administrator account, the locked root, the `gladys` hostname, and the enabled OpenSSH server. Tests never log in with a password: disks are inspected powered off, read only, with libguestfs.

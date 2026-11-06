@@ -776,6 +776,36 @@ fi
                 self.assertEqual(upload["if"], "always()")
                 self.assertIn("build/**/*serial.log", upload["with"]["path"])
 
+    def test_network_recovery_disk_is_installed_without_network(self) -> None:
+        install = (INTEGRATION / "qemu-install.sh").read_text(encoding="utf-8")
+        self.assertIn('NETDEV="hubport,id=net0,hubid=0"', install)
+        self.assertIn('-netdev "$NETDEV"', install)
+        for workflow, disk in (("nightly.yml", "build/qemu-network"), ("release.yml", "build/network")):
+            with self.subTest(workflow=workflow):
+                text = (ROOT / ".github" / "workflows" / workflow).read_text(encoding="utf-8")
+                self.assertIn(f"--work-dir {disk} --offline\n", text)
+                self.assertIn(f"qemu-network-recovery.sh --disk {disk}/system.qcow2", text)
+        # The recovery checks DHCP on every Ethernet port before booting.
+        network = (INTEGRATION / "qemu-network-recovery.sh").read_text(encoding="utf-8")
+        self.assertIn("""*'name: "en*"'* && "$netplan" == *'name: "eth*"'*""", network)
+
+    def test_every_boot_has_an_unplugged_port_and_first_boot_does_not_wait_for_it(self) -> None:
+        common = (INTEGRATION / "qemu-common.sh").read_text(encoding="utf-8")
+        start_vm = common[common.index("start_vm() {"):common.index("stop_vm() {")]
+        for contract in (
+            "-device virtio-net-pci,netdev=unplugged",
+            "-netdev hubport,id=unplugged,hubid=1",
+            '-monitor "unix:$monitor,server=on,wait=off"',
+            "-S \\",
+            'unplug_second_port "$monitor"',
+            '"set_link unplugged off", "cont"',
+        ):
+            self.assertIn(contract, start_vm)
+        self.assertIn("Finished systemd-networkd-wait-online.service", common)
+        self.assertIn("Timeout occurred", common)
+        firstboot = (INTEGRATION / "qemu-firstboot.sh").read_text(encoding="utf-8")
+        self.assertIn('assert_network_online_without_waiting "$DISK"', firstboot)
+
     def test_recovery_scripts_reuse_disk_and_power_test_forces_termination(self) -> None:
         network = (INTEGRATION / "qemu-network-recovery.sh").read_text(encoding="utf-8")
         power = (INTEGRATION / "qemu-power-loss.sh").read_text(encoding="utf-8")

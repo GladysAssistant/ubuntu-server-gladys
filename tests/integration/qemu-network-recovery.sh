@@ -35,6 +35,24 @@ done
 require_qemu_tools
 prepare_libguestfs "$WORK_DIR"
 find_ovmf
+
+show_netplan() {
+	virt-ls -a "$DISK" /etc/netplan | while read -r name; do
+		printf -- '--- /etc/netplan/%s\n' "$name"
+		virt-cat -a "$DISK" "/etc/netplan/$name"
+	done
+}
+
+# The disk was installed without network (qemu-install.sh --offline). The
+# installer must still have replaced its netplan file with DHCP on every
+# Ethernet port, so the cable plugged in afterwards gets an address.
+show_netplan
+netplan="$(virt-cat -a "$DISK" /etc/netplan/00-installer-config.yaml)"
+[[ "$netplan" == *'name: "en*"'* && "$netplan" == *'name: "eth*"'* ]] || {
+	printf 'The installer did not enable DHCP on every Ethernet port\n' >&2
+	exit 1
+}
+
 trap stop_vm EXIT
 start_vm "$DISK" "$VARS" "$WORK_DIR/offline-serial.log" "$HOST_PORT" offline # restrict=on
 wait_for_phase "$HOST_PORT" WAIT_NETWORK 900

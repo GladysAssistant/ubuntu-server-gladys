@@ -39,6 +39,12 @@ autoinstall:
     - [sh, -c, "chown -R 0:0 /target/usr/lib/gladys-installer /target/usr/share/gladys-installer /target/opt/gladys /target/etc/gladys-installer /target/var/lib/gladys-installer"]
     - [sh, -c, "chmod 0755 /target/usr/lib/gladys-installer/*.py /target/usr/local/sbin/gladys-diagnostics"]
     - [sh, -c, "chmod 0644 /target/etc/systemd/system/gladys-*.service /target/opt/gladys/compose.yaml"]
+    # Subiquity only keeps DHCP on the interfaces that had an address during
+    # the installation: none without the Ethernet cable. Replace its netplan
+    # file with DHCP on every wired interface, so the cable works in any port,
+    # at any time. The network screen is not interactive, so the file never
+    # holds an operator choice.
+    - [sh, -c, "install -m 0600 /target/usr/share/gladys-installer/netplan-wired-dhcp.yaml /target/etc/netplan/00-installer-config.yaml"]
     # Ubuntu Server keeps the C.UTF-8 system locale, so record the language
     # chosen in the installer for the setup page and the tty1 console.
     - [sh, -c, "sed -n 's/^  locale: //p' /var/log/installer/autoinstall-user-data | head -n 1 > /target/etc/gladys-installer/language; chmod 0644 /target/etc/gladys-installer/language"]

@@ -3,6 +3,10 @@ from __future__ import annotations
 import copy
 import json
 import re
+import shutil
+import stat
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -84,6 +88,89 @@ class AutoinstallConfigurationTests(unittest.TestCase):
         self.assertNotIn("lvextend", rendered)
         self.assertIn("systemctl --root=/target enable gladys-firstboot.service", rendered)
         self.assertIn("systemctl --root=/target mask getty@tty1.service", rendered)
+
+    def test_every_install_uses_dhcp_on_every_wired_interface(self) -> None:
+        commands = load_autoinstall("autoinstall.yaml")["late-commands"]
+        extract_at = next(i for i, command in enumerate(commands) if "tar --extract" in str(command))
+        replace_at = next(i for i, command in enumerate(commands) if "netplan-wired-dhcp.yaml" in str(command))
+        self.assertLess(extract_at, replace_at)
+        replace = commands[replace_at]
+        payload_file = ROOT / "payload" / "usr" / "share" / "gladys-installer" / "netplan-wired-dhcp.yaml"
+        self.assertEqual(
+            yaml.safe_load(payload_file.read_text(encoding="utf-8")),
+            {
+                "network": {
+                    "version": 2,
+                    "ethernets": {
+                        "wired": {"match": {"name": "en*"}, "dhcp4": True},
+                        # Interfaces without a predictable name, as in Hyper-V.
+                        "wired-eth": {"match": {"name": "eth*"}, "dhcp4": True},
+                    },
+                }
+            },
+        )
+
+        # What Subiquity writes to the target. An interface without an address
+        # after its DHCP wait loses dhcp4 and dhcp6 but keeps the rest of its
+        # live-system definition, such as its MAC match, and is left out only
+        # when nothing remains (subiquitycore/models/network.py and netplan.py).
+        # Whatever it wrote, a single definition must remain.
+        stripped = {"match": {"macaddress": "52:54:00:12:34:56"}, "set-name": "enp0s2"}
+        cases = {
+            "offline, interface left out": {},
+            "offline, interface kept without DHCP": {"enp0s2": stripped},
+            "online": {"enp1s0": {"dhcp4": True}},
+        }
+        for name, ethernets in cases.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
+                target = Path(directory)
+                netplan = target / "etc" / "netplan"
+                netplan.mkdir(parents=True)
+                installer_config = netplan / "00-installer-config.yaml"
+                installer_config.write_text(
+                    "# This is the network config written by 'subiquity'\n"
+                    + yaml.dump({"network": {"version": 2, "ethernets": ethernets}}, default_flow_style=False),
+                    encoding="utf-8",
+                )
+                share = target / "usr" / "share" / "gladys-installer"
+                share.mkdir(parents=True)
+                shutil.copyfile(payload_file, share / payload_file.name)
+
+                script = replace[2].replace("/target/", f"{target}/")
+                subprocess.run([replace[0], replace[1], script], check=True)
+
+                self.assertEqual([path.name for path in netplan.iterdir()], ["00-installer-config.yaml"])
+                self.assertEqual(installer_config.read_bytes(), payload_file.read_bytes())
+                self.assertEqual(stat.S_IMODE(installer_config.stat().st_mode), 0o600)
+
+    def test_network_is_online_as_soon_as_any_wired_port_is_routable(self) -> None:
+        drop_in = (
+            ROOT / "payload" / "etc" / "systemd" / "system"
+            / "systemd-networkd-wait-online.service.d" / "90-gladys.conf"
+        )
+        directives = [
+            line
+            for line in drop_in.read_text(encoding="utf-8").splitlines()
+            if line and not line.startswith("#")
+        ]
+        self.assertEqual(
+            directives,
+            [
+                # netplan skips the service when no interface matches "wired"
+                # or "wired-eth" early at boot: reset its condition, keep the
+                # unit's own.
+                "[Unit]",
+                "ConditionPathIsSymbolicLink=",
+                "ConditionCapability=CAP_NET_ADMIN",
+                "After=systemd-resolved.service",
+                "[Service]",
+                "ExecStart=",
+                "ExecStart=/usr/lib/systemd/systemd-networkd-wait-online --any --dns -o routable",
+            ],
+        )
+        # systemd applies drop-ins in file name order, whatever their
+        # directory, so this one must come after the one netplan generates.
+        self.assertLess("10-netplan.conf", drop_in.name)
 
     def test_installer_version_is_independent_from_gladys(self) -> None:
         version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
