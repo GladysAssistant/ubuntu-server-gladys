@@ -73,7 +73,7 @@ bash tests/integration/qemu-firstboot.sh \
   --profile ci-smoke
 ```
 
-Every boot started by these scripts has a second Ethernet port without a cable: QEMU starts paused, its monitor sets that link down, then resumes the VM. `qemu-firstboot.sh` reads the installed journal and requires `systemd-networkd-wait-online` to finish without timing out, so the network never waits for an unused port.
+Every boot started by these scripts has a second Ethernet port without a cable: QEMU starts paused, its monitor sets that link down, then resumes the VM. `qemu-firstboot.sh` reads the installed journal and requires `systemd-networkd-wait-online` to run, not be skipped, and finish without timing out, so Docker waits for the network but never for an unused port.
 
 Two additional scripts exercise the failure paths that matter for an unattended appliance:
 

@@ -147,6 +147,12 @@ class AutoinstallConfigurationTests(unittest.TestCase):
         self.assertEqual(
             directives,
             [
+                # netplan skips the service when no interface matches "wired"
+                # early at boot: reset its condition, keep the unit's own.
+                "[Unit]",
+                "ConditionPathIsSymbolicLink=",
+                "ConditionCapability=CAP_NET_ADMIN",
+                "After=systemd-resolved.service",
                 "[Service]",
                 "ExecStart=",
                 "ExecStart=/usr/lib/systemd/systemd-networkd-wait-online --any --dns -o routable",

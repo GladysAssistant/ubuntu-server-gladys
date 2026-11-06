@@ -486,7 +486,8 @@ assert_gladys_timezone() {
 }
 
 # Every Ethernet port has DHCP, and start_vm adds a port without a cable. The
-# network must come online through the other port without waiting for it
+# network must come online through the other port without waiting for it, and
+# Docker must still wait for the network: the service must run, not be skipped
 # (payload/etc/systemd/system/systemd-networkd-wait-online.service.d).
 assert_network_online_without_waiting() {
 	local disk="$1" temporary log
@@ -498,7 +499,7 @@ assert_network_online_without_waiting() {
 	printf '%s\n' "$log"
 	[[ "$log" == *"Finished systemd-networkd-wait-online.service"* &&
 		"$log" != *"Timeout occurred"* && "$log" != *"Failed to start"* ]] || {
-		printf 'The network waited for the Ethernet port without a cable\n' >&2
+		printf 'systemd-networkd-wait-online was skipped, or waited for the Ethernet port without a cable\n' >&2
 		return 1
 	}
 }
