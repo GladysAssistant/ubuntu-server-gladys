@@ -1,8 +1,8 @@
-# Replaces the installer's /etc/netplan/00-installer-config.yaml when the
-# machine had no network during the installation: the installer then enables
-# DHCP on no interface, and a cable plugged in afterwards would never get an
-# address. Use DHCP on every wired interface, whichever one gets the cable.
-# Once online, first boot keeps DHCP on the port in use only.
+# Installed by the Gladys installer in place of the installer's own netplan
+# file, which only enables DHCP on the interfaces that had an address during
+# the installation. Use DHCP on every wired interface, so the Ethernet cable
+# works in any port, at any time. A definition named after an interface, such
+# as enp1s0 for a static address, takes precedence over "wired".
 network:
   version: 2
   ethernets:

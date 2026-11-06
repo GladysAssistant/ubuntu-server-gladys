@@ -43,11 +43,12 @@ show_netplan() {
 	done
 }
 
-# The disk was installed without network (qemu-install.sh --offline), so the
-# installer must have replaced its netplan file with the wired fallback.
+# The disk was installed without network (qemu-install.sh --offline). The
+# installer must still have replaced its netplan file with DHCP on every
+# Ethernet port, so the cable plugged in afterwards gets an address.
 show_netplan
 [[ "$(virt-cat -a "$DISK" /etc/netplan/00-installer-config.yaml)" == *'name: "en*"'* ]] || {
-	printf 'The installation without network did not install the wired fallback\n' >&2
+	printf 'The installer did not enable DHCP on every Ethernet port\n' >&2
 	exit 1
 }
 
@@ -62,10 +63,3 @@ virt-cat -a "$DISK" /var/lib/gladys-installer/state.json |
 bash "$SCRIPT_DIR/qemu-firstboot.sh" \
 	--disk "$DISK" --vars "$VARS" --work-dir "$WORK_DIR/network-resumed" \
 	--profile ci-smoke --host-port "$HOST_PORT"
-
-# Online, first boot keeps DHCP on the port in use only.
-show_netplan
-[[ "$(virt-cat -a "$DISK" /etc/netplan/00-installer-config.yaml)" == *'Written by Gladys first boot'* ]] || {
-	printf 'First boot kept DHCP on every Ethernet port\n' >&2
-	exit 1
-}

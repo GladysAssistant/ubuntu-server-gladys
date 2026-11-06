@@ -13,7 +13,7 @@ require_qemu_tools() {
 	local command
 	for command in \
 		curl flock guestfish libguestfs-make-fixed-appliance libguestfs-test-tool \
-		python3 qemu-img qemu-system-x86_64 timeout virt-cat virt-ls; do
+		journalctl python3 qemu-img qemu-system-x86_64 timeout virt-cat virt-copy-out virt-ls; do
 		command -v "$command" >/dev/null || {
 			printf 'Required QEMU test command not found: %s\n' "$command" >&2
 			return 69
@@ -186,7 +186,7 @@ find_ovmf() {
 start_vm() {
 	local disk="$1" vars="$2" serial_log="$3" host_port="$4" connectivity="${5:-online}"
 	local test_signal="${6:-none}"
-	local netdev="user,id=net0,hostfwd=tcp:127.0.0.1:${host_port}-:80"
+	local netdev="user,id=net0,hostfwd=tcp:127.0.0.1:${host_port}-:80" monitor
 	local -a extra_qemu_args=()
 	[[ "$connectivity" == "online" || "$connectivity" == "offline" ]] || return 64
 	[[ "$test_signal" == "none" || "$test_signal" == "dpkg-power-loss" ]] || return 64
@@ -197,6 +197,10 @@ start_vm() {
 		extra_qemu_args=(-fw_cfg "name=opt/gladys/power-loss-test,string=1")
 	fi
 	mkdir -p -- "$(dirname -- "$serial_log")"
+	monitor="$(dirname -- "$serial_log")/monitor.sock"
+	rm -f -- "$monitor"
+	# A second Ethernet port without a cable, as on a two-port mini-PC: the VM
+	# starts paused, unplug_second_port sets that link down, then resumes it.
 	qemu-system-x86_64 \
 		-name gladys-firstboot \
 		-machine q35,accel=kvm \
@@ -209,11 +213,55 @@ start_vm() {
 		-drive "if=virtio,format=qcow2,discard=unmap,file=$disk" \
 		-device virtio-net-pci,netdev=net0 \
 		-netdev "$netdev" \
+		-device virtio-net-pci,netdev=unplugged \
+		-netdev hubport,id=unplugged,hubid=1 \
 		"${extra_qemu_args[@]}" \
 		-display none \
-		-monitor none \
+		-monitor "unix:$monitor,server=on,wait=off" \
+		-S \
 		-serial "file:$serial_log" &
 	QEMU_PID=$!
+	unplug_second_port "$monitor"
+}
+
+unplug_second_port() {
+	python3 - "$1" <<'PY'
+import socket
+import sys
+import time
+
+deadline = time.monotonic() + 30
+while True:
+    monitor = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        monitor.connect(sys.argv[1])
+        break
+    except OSError:
+        monitor.close()
+        if time.monotonic() > deadline:
+            raise SystemExit("QEMU monitor did not open")
+        time.sleep(0.2)
+monitor.settimeout(10)
+
+
+def read_prompt() -> str:
+    received = b""
+    while not received.endswith(b"(qemu) "):
+        chunk = monitor.recv(4096)
+        if not chunk:
+            raise SystemExit("QEMU monitor closed")
+        received += chunk
+    return received.decode(errors="replace")
+
+
+read_prompt()
+for command in ("set_link unplugged off", "cont"):
+    monitor.sendall(command.encode() + b"\n")
+    answer = read_prompt()
+    if "not found" in answer or "error" in answer.lower():
+        raise SystemExit(f"QEMU monitor rejected {command!r}: {answer}")
+monitor.close()
+PY
 }
 
 stop_vm() {
@@ -433,6 +481,24 @@ assert_gladys_timezone() {
 	environment="$(virt-cat -a "$disk" /opt/gladys/.env)"
 	[[ "$environment" =~ ^GLADYS_TZ=[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+)*$ ]] || {
 		printf 'Gladys time zone not recorded: %s\n' "$environment" >&2
+		return 1
+	}
+}
+
+# Every Ethernet port has DHCP, and start_vm adds a port without a cable. The
+# network must come online through the other port without waiting for it
+# (payload/etc/systemd/system/systemd-networkd-wait-online.service.d).
+assert_network_online_without_waiting() {
+	local disk="$1" temporary log
+	temporary="$(mktemp -d)"
+	virt-copy-out -a "$disk" /var/log/journal "$temporary"
+	log="$(journalctl --file="$temporary/journal/*/*.journal" \
+		--unit=systemd-networkd-wait-online.service --output=cat --no-pager)"
+	rm -rf -- "$temporary"
+	printf '%s\n' "$log"
+	[[ "$log" == *"Finished systemd-networkd-wait-online.service"* &&
+		"$log" != *"Timeout occurred"* && "$log" != *"Failed to start"* ]] || {
+		printf 'The network waited for the Ethernet port without a cable\n' >&2
 		return 1
 	}
 }
